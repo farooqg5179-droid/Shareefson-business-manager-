@@ -1,0 +1,289 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  color: #171717;
+  background: #ffffff;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  background: #ffffff;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 2px;
+}
+
+.app {
+  min-height: 100vh;
+  padding-bottom: 88px;
+  background: #ffffff;
+}
+
+/* Top Bar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 18px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  color: #a98216;
+  margin-bottom: 5px;
+}
+
+.topbar h1 {
+  font-size: 22px;
+  line-height: 1.2;
+  color: #111111;
+}
+
+.profile-button {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e5e5;
+  border-radius: 50%;
+  background: #fafafa;
+  font-size: 19px;
+}
+
+/* Main */
+
+.dashboard {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+/* Welcome */
+
+.welcome-card {
+  padding: 22px;
+  border-radius: 18px;
+  background: linear-gradient(
+    135deg,
+    #fffdf5,
+    #ffffff
+  );
+  border: 1px solid #eadcae;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+
+.welcome-card p {
+  color: #666666;
+  font-size: 13px;
+  margin-bottom: 7px;
+}
+
+.welcome-card h2 {
+  font-size: 21px;
+  line-height: 1.3;
+  color: #111111;
+  margin-bottom: 8px;
+}
+
+.welcome-card span {
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Stats */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stat-card {
+  min-height: 105px;
+  padding: 16px;
+  border: 1px solid #eeeeee;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.04);
+}
+
+.stat-card span {
+  display: block;
+  color: #777777;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.stat-card strong {
+  color: #111111;
+  font-size: 22px;
+}
+
+/* Sections */
+
+.section {
+  margin-top: 28px;
+}
+
+.section-heading {
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  font-size: 20px;
+  color: #111111;
+}
+
+/* Quick Actions */
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 11px;
+}
+
+.actions-grid button {
+  min-height: 58px;
+  padding: 12px;
+  border: 1px solid #e6d49a;
+  border-radius: 14px;
+  background: #fffdf5;
+  color: #171717;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.actions-grid button:hover {
+  background: #f9f1d3;
+  transform: translateY(-1px);
+}
+
+.actions-grid button:active {
+  transform: scale(0.98);
+}
+
+/* Empty Event Card */
+
+.empty-card {
+  padding: 30px 20px;
+  text-align: center;
+  border: 1px dashed #dcdcdc;
+  border-radius: 17px;
+  background: #fafafa;
+}
+
+.empty-icon {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.empty-card h3 {
+  font-size: 16px;
+  color: #222222;
+  margin-bottom: 7px;
+}
+
+.empty-card p {
+  font-size: 13px;
+  color: #777777;
+}
+
+/* Bottom Navigation */
+
+.bottom-nav {
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+
+  height: 72px;
+  padding: 7px 5px;
+
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid #e9e9e9;
+
+  box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.05);
+}
+
+.bottom-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  border: 0;
+  background: transparent;
+  color: #777777;
+
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.bottom-nav button span {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.bottom-nav button:first-child {
+  color: #a98216;
+}
+
+/* Tablet / Desktop */
+
+@media (min-width: 700px) {
+  .dashboard {
+    padding: 28px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .actions-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    width: min(650px, 100%);
+    transform: translateX(-50%);
+    border: 1px solid #e9e9e9;
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+  }
+  }
