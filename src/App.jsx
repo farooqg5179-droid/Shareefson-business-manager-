@@ -56,6 +56,7 @@ function App() {
 
   const [customerMessage, setCustomerMessage] = useState("");
   const [customerSaving, setCustomerSaving] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   // ---------------------------------------------------
   // SESSION
@@ -539,6 +540,7 @@ function App() {
 
     setShowCustomerForm(false);
     setCustomerMessage("");
+    setSelectedCustomer(null);
   }
 
   function showHome() {
@@ -652,6 +654,78 @@ function App() {
   // ---------------------------------------------------
   // CUSTOMERS PAGE
   // ---------------------------------------------------
+
+  if (currentPage === "customers" && selectedCustomer) {
+    return (
+      <div className="app">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">CUSTOMER DETAIL</p>
+
+            <h1>{selectedCustomer.name || "Unnamed Customer"}</h1>
+          </div>
+
+          <button
+            className="profile-button"
+            onClick={() => setSelectedCustomer(null)}
+          >
+            ← Back
+          </button>
+        </header>
+
+        <main className="dashboard">
+          <section className="section">
+            <div className="profile-form">
+              <label>Customer Name</label>
+              <p>{selectedCustomer.name || "—"}</p>
+
+              <label>Phone Number</label>
+              <p>{selectedCustomer.phone || "—"}</p>
+
+              <label>WhatsApp Number</label>
+              <p>{selectedCustomer.whatsapp_number || "—"}</p>
+
+              <label>Address</label>
+              <p>{selectedCustomer.address || "—"}</p>
+
+              <label>Notes</label>
+              <p>{selectedCustomer.notes || "—"}</p>
+            </div>
+          </section>
+        </main>
+
+        <nav className="bottom-nav">
+          <button onClick={showHome}>
+            ⌂
+            <span>Home</span>
+          </button>
+
+          <button
+            className="active"
+            onClick={() => setSelectedCustomer(null)}
+          >
+            👥
+            <span>Customers</span>
+          </button>
+
+          <button>
+            📅
+            <span>Bookings</span>
+          </button>
+
+          <button>
+            🧾
+            <span>Invoices</span>
+          </button>
+
+          <button onClick={showSettings}>
+            ⚙️
+            <span>Settings</span>
+          </button>
+        </nav>
+      </div>
+    );
+  }
 
   if (currentPage === "customers") {
     return (
@@ -817,6 +891,8 @@ function App() {
                   <div
                     className="stat-card"
                     key={customer.id}
+                    onClick={() => setSelectedCustomer(customer)}
+                    style={{ cursor: "pointer" }}
                   >
                     <span>
                       {customer.name ||
@@ -1238,4 +1314,4 @@ function App() {
 }
 
 export default App;
-                
+            
