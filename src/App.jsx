@@ -22,6 +22,10 @@ function App() {
   const [whatsapp, setWhatsapp] = useState("");
   const [address, setAddress] = useState("");
 
+  // Business profile saving states
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+
   useEffect(() => {
     async function getSession() {
       const { data } = await supabase.auth.getSession();
@@ -103,8 +107,41 @@ function App() {
     setCurrentPage("home");
   }
 
+  // Save Business Profile to Supabase
+  async function saveBusinessProfile() {
+    setProfileSaving(true);
+    setProfileMessage("");
+
+    const userId = session.user.id;
+
+    const { error } = await supabase
+      .from("ss_business_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          business_name: businessName,
+          phone: phone,
+          whatsapp_number: whatsapp,
+          address: address,
+        },
+        {
+          onConflict: "user_id",
+        }
+      );
+
+    if (error) {
+      console.error(error);
+      setProfileMessage("❌ Profile save failed: " + error.message);
+    } else {
+      setProfileMessage("✅ Business profile saved successfully.");
+    }
+
+    setProfileSaving(false);
+  }
+
   function showSettings() {
     setCurrentPage("settings");
+    setProfileMessage("");
   }
 
   function showHome() {
@@ -211,10 +248,12 @@ function App() {
         <main className="dashboard">
           <section className="welcome-card">
             <p>BUSINESS INFORMATION</p>
+
             <h2>Business Profile</h2>
+
             <span>
-              Add your business details. We will connect saving and uploads in
-              the next step.
+              Add your business details. Your information will be securely
+              saved to your business account.
             </span>
           </section>
 
@@ -282,9 +321,18 @@ function App() {
                 <button type="button">Choose Signature</button>
               </div>
 
-              <button className="auth-submit" type="button">
-                Save Business Profile
+              <button
+                className="auth-submit"
+                type="button"
+                onClick={saveBusinessProfile}
+                disabled={profileSaving}
+              >
+                {profileSaving ? "Saving..." : "Save Business Profile"}
               </button>
+
+              {profileMessage && (
+                <p className="auth-message">{profileMessage}</p>
+              )}
             </div>
           </section>
         </main>
@@ -297,6 +345,7 @@ function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">SHAREEF SONS</p>
+
           <h1>Business Manager</h1>
         </div>
 
@@ -308,28 +357,34 @@ function App() {
       <main className="dashboard">
         <section className="welcome-card">
           <p>WELCOME BACK</p>
+
           <h2>Shareef Sons Events Organizer</h2>
+
           <span>{session.user.email}</span>
         </section>
 
         <section className="stats-grid">
           <div className="stat-card">
             <span>Bookings</span>
+
             <strong>0</strong>
           </div>
 
           <div className="stat-card">
             <span>Income</span>
+
             <strong>Rs. 0</strong>
           </div>
 
           <div className="stat-card">
             <span>Expenses</span>
+
             <strong>Rs. 0</strong>
           </div>
 
           <div className="stat-card">
             <span>Pending</span>
+
             <strong>Rs. 0</strong>
           </div>
         </section>
@@ -338,16 +393,22 @@ function App() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">QUICK ACTIONS</p>
+
               <h2>Manage Business</h2>
             </div>
           </div>
 
           <div className="actions-grid">
             <button>+ New Customer</button>
+
             <button>+ New Booking</button>
+
             <button>+ Create Invoice</button>
+
             <button>+ Payment In</button>
+
             <button>+ Payment Out</button>
+
             <button>+ Add Note</button>
           </div>
         </section>
