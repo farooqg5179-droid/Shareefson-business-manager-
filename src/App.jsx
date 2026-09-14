@@ -58,6 +58,15 @@ function App() {
   const [customerSaving, setCustomerSaving] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editWhatsapp, setEditWhatsapp] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editMessage, setEditMessage] = useState("");
+
   // ---------------------------------------------------
   // SESSION
   // ---------------------------------------------------
@@ -222,6 +231,61 @@ function App() {
     }
 
     setCustomerSaving(false);
+  }
+
+  // ---------------------------------------------------
+  // EDIT CUSTOMER
+  // ---------------------------------------------------
+
+  function openEditCustomer() {
+    setEditName(selectedCustomer.name || "");
+    setEditPhone(selectedCustomer.phone || "");
+    setEditWhatsapp(selectedCustomer.whatsapp_number || "");
+    setEditAddress(selectedCustomer.address || "");
+    setEditNotes(selectedCustomer.notes || "");
+    setEditMessage("");
+    setEditingCustomer(true);
+  }
+
+  async function updateCustomer() {
+    if (!editName) {
+      setEditMessage("❌ Please enter customer name.");
+      return;
+    }
+
+    setEditSaving(true);
+    setEditMessage("");
+
+    const { error } = await supabase
+      .from("ss_customers")
+      .update({
+        name: editName,
+        phone: editPhone,
+        whatsapp_number: editWhatsapp,
+        address: editAddress,
+        notes: editNotes,
+      })
+      .eq("id", selectedCustomer.id);
+
+    if (error) {
+      console.error("Customer update error:", error);
+      setEditMessage("❌ Update failed: " + error.message);
+    } else {
+      const updatedCustomer = {
+        ...selectedCustomer,
+        name: editName,
+        phone: editPhone,
+        whatsapp_number: editWhatsapp,
+        address: editAddress,
+        notes: editNotes,
+      };
+
+      setSelectedCustomer(updatedCustomer);
+      setEditingCustomer(false);
+      loadCustomers();
+    }
+
+    setEditSaving(false);
   }
 
   // ---------------------------------------------------
@@ -541,6 +605,7 @@ function App() {
     setShowCustomerForm(false);
     setCustomerMessage("");
     setSelectedCustomer(null);
+    setEditingCustomer(false);
   }
 
   function showHome() {
@@ -667,7 +732,10 @@ function App() {
 
           <button
             className="profile-button"
-            onClick={() => setSelectedCustomer(null)}
+            onClick={() => {
+              setSelectedCustomer(null);
+              setEditingCustomer(false);
+            }}
           >
             ← Back
           </button>
@@ -675,22 +743,90 @@ function App() {
 
         <main className="dashboard">
           <section className="section">
-            <div className="profile-form">
-              <label>Customer Name</label>
-              <p>{selectedCustomer.name || "—"}</p>
+            {editingCustomer ? (
+              <div className="profile-form">
+                <label>Customer Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
 
-              <label>Phone Number</label>
-              <p>{selectedCustomer.phone || "—"}</p>
+                <label>Phone Number</label>
+                <input
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                />
 
-              <label>WhatsApp Number</label>
-              <p>{selectedCustomer.whatsapp_number || "—"}</p>
+                <label>WhatsApp Number</label>
+                <input
+                  type="tel"
+                  value={editWhatsapp}
+                  onChange={(e) => setEditWhatsapp(e.target.value)}
+                />
 
-              <label>Address</label>
-              <p>{selectedCustomer.address || "—"}</p>
+                <label>Address</label>
+                <textarea
+                  rows="3"
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                />
 
-              <label>Notes</label>
-              <p>{selectedCustomer.notes || "—"}</p>
-            </div>
+                <label>Notes</label>
+                <textarea
+                  rows="3"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                />
+
+                <button
+                  className="auth-submit"
+                  type="button"
+                  onClick={updateCustomer}
+                  disabled={editSaving}
+                >
+                  {editSaving ? "Saving..." : "Save Changes"}
+                </button>
+
+                <button
+                  className="profile-button"
+                  type="button"
+                  onClick={() => setEditingCustomer(false)}
+                >
+                  Cancel
+                </button>
+
+                {editMessage && (
+                  <p className="auth-message">{editMessage}</p>
+                )}
+              </div>
+            ) : (
+              <div className="profile-form">
+                <label>Customer Name</label>
+                <p>{selectedCustomer.name || "—"}</p>
+
+                <label>Phone Number</label>
+                <p>{selectedCustomer.phone || "—"}</p>
+
+                <label>WhatsApp Number</label>
+                <p>{selectedCustomer.whatsapp_number || "—"}</p>
+
+                <label>Address</label>
+                <p>{selectedCustomer.address || "—"}</p>
+
+                <label>Notes</label>
+                <p>{selectedCustomer.notes || "—"}</p>
+
+                <button
+                  className="auth-submit"
+                  type="button"
+                  onClick={openEditCustomer}
+                >
+                  Edit Customer
+                </button>
+              </div>
+            )}
           </section>
         </main>
 
@@ -702,7 +838,10 @@ function App() {
 
           <button
             className="active"
-            onClick={() => setSelectedCustomer(null)}
+            onClick={() => {
+              setSelectedCustomer(null);
+              setEditingCustomer(false);
+            }}
           >
             👥
             <span>Customers</span>
@@ -1314,4 +1453,4 @@ function App() {
 }
 
 export default App;
-            
+                
