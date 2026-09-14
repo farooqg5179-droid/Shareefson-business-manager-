@@ -55,6 +55,7 @@ function App() {
   const [customerNotes, setCustomerNotes] = useState("");
 
   const [customerMessage, setCustomerMessage] = useState("");
+  const [customerSaving, setCustomerSaving] = useState(false);
 
   // ---------------------------------------------------
   // SESSION
@@ -179,6 +180,48 @@ function App() {
       loadCustomers();
     }
   }, [currentPage, session]);
+
+  // ---------------------------------------------------
+  // SAVE CUSTOMER
+  // ---------------------------------------------------
+
+  async function saveCustomer() {
+    if (!customerName) {
+      setCustomerMessage("❌ Please enter customer name.");
+      return;
+    }
+
+    setCustomerSaving(true);
+    setCustomerMessage("");
+
+    const { error } = await supabase.from("ss_customers").insert({
+      user_id: session.user.id,
+      name: customerName,
+      phone: customerPhone,
+      whatsapp_number: customerWhatsapp,
+      address: customerAddress,
+      notes: customerNotes,
+    });
+
+    if (error) {
+      console.error("Customer save error:", error);
+      setCustomerMessage("❌ Save failed: " + error.message);
+    } else {
+      setCustomerMessage("✅ Customer saved successfully.");
+
+      setCustomerName("");
+      setCustomerPhone("");
+      setCustomerWhatsapp("");
+      setCustomerAddress("");
+      setCustomerNotes("");
+
+      setShowCustomerForm(false);
+
+      loadCustomers();
+    }
+
+    setCustomerSaving(false);
+  }
 
   // ---------------------------------------------------
   // AUTH
@@ -728,13 +771,10 @@ function App() {
                 <button
                   className="auth-submit"
                   type="button"
-                  onClick={() => {
-                    setCustomerMessage(
-                      "Customer save will be connected in Step 8B."
-                    );
-                  }}
+                  onClick={saveCustomer}
+                  disabled={customerSaving}
                 >
-                  Save Customer
+                  {customerSaving ? "Saving..." : "Save Customer"}
                 </button>
 
                 {customerMessage && (
@@ -1198,3 +1238,4 @@ function App() {
 }
 
 export default App;
+                
