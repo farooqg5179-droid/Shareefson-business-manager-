@@ -747,3 +747,43 @@ body {
     box-shadow: none;
   }
 }
+/* ===== FORM FIELDS (missing styles) ===== */
+.form-card label {
+  display: block;
+  font-weight: 700;
+  font-size: 13px;
+  color: #444;
+  margin: 14px 0 6px;
+}
+
+.form-card input[type="text"],
+.form-card input[type="number"],
+.form-card input[type="date"],
+.form-card input[type="email"],
+.form-card input[type="tel"],
+.form-card input:not([type]),
+.form-card textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  outline: none;
+  background: #ffffff;
+  color: #222222;
+  font: inherit;
+}
+
+.form-card input:focus,
+.form-card textarea:focus {
+  border-color: #c9a227;
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.12);
+}
+
+.form-card textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.form-card h2 {
+  font-size: 20px;
+}
