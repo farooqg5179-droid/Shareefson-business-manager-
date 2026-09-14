@@ -1457,4 +1457,398 @@ img {
 }
 
 .calendar-event b {
-  d
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #272727;
+
+  font-size: 13px;
+}
+
+.calendar-event > div:last-child span {
+  color: #777777;
+
+  font-size: 10px;
+}
+
+/* =========================================================
+   SETTINGS
+========================================================= */
+
+.upload-placeholder {
+  margin-top: 15px;
+
+  padding: 22px 16px;
+
+  border: 1px dashed #d7c68e;
+  border-radius: 17px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #fffdf7,
+      #ffffff
+    );
+
+  text-align: center;
+}
+
+.upload-icon {
+  margin-bottom: 7px;
+
+  font-size: 30px;
+}
+
+.upload-placeholder h3 {
+  margin: 4px 0 6px;
+
+  color: #252525;
+
+  font-size: 16px;
+}
+
+.upload-placeholder p {
+  max-width: 330px;
+
+  margin: 0 auto 13px;
+
+  color: #777777;
+
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.upload-placeholder button {
+  border: 1px solid #c9a227;
+  border-radius: 10px;
+
+  padding: 10px 15px;
+
+  background: #ffffff;
+  color: #a17b16;
+
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-image {
+  display: block;
+
+  width: 110px;
+  height: 110px;
+
+  margin: 12px auto;
+
+  object-fit: contain;
+
+  border: 1px solid #eeeeee;
+  border-radius: 13px;
+
+  background: #ffffff;
+}
+
+.settings-signature {
+  display: block;
+
+  max-width: 210px;
+  max-height: 90px;
+
+  margin: 12px auto;
+
+  object-fit: contain;
+}
+
+/* =========================================================
+   MORE SHORTCUTS
+========================================================= */
+
+.more-shortcuts {
+  position: fixed;
+
+  right: 14px;
+  bottom: 78px;
+
+  z-index: 15;
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+
+  gap: 6px;
+
+  max-width: 250px;
+
+  pointer-events: none;
+}
+
+.more-shortcuts button {
+  pointer-events: auto;
+
+  padding: 7px 9px;
+
+  border: 1px solid #e5d6a9;
+  border-radius: 9px;
+
+  background: #fffdf7;
+  color: #987116;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  box-shadow:
+    0 5px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* =========================================================
+   BOTTOM NAVIGATION
+========================================================= */
+
+.bottom-nav {
+  position: fixed;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  z-index: 50;
+
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+
+  padding: 7px 4px calc(7px + env(safe-area-inset-bottom));
+
+  border-top: 1px solid #e8e8e8;
+
+  background: rgba(255, 255, 255, 0.97);
+
+  backdrop-filter: blur(14px);
+
+  box-shadow:
+    0 -5px 20px rgba(0, 0, 0, 0.035);
+}
+
+.bottom-nav button {
+  min-width: 0;
+
+  padding: 5px 2px;
+
+  border: none;
+
+  border-radius: 10px;
+
+  background: transparent;
+
+  color: #888888;
+
+  font-size: 18px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 3px;
+
+  transition: 0.2s ease;
+}
+
+.bottom-nav button span {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.bottom-nav button.active {
+  color: #a17a14;
+
+  background: #fffaf0;
+}
+
+/* =========================================================
+   PRINT INVOICE
+========================================================= */
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .topbar,
+  .bottom-nav,
+  .no-print,
+  .more-shortcuts {
+    display: none !important;
+  }
+
+  .app {
+    padding: 0;
+  }
+
+  .dashboard {
+    max-width: none;
+    padding: 0;
+  }
+
+  .invoice-paper {
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}
+
+/* =========================================================
+   TABLET
+========================================================= */
+
+@media (min-width: 600px) {
+  .dashboard {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .actions-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .two-col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .three-col {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .invoice-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .auth-card {
+    padding: 40px;
+  }
+}
+
+/* =========================================================
+   DESKTOP
+========================================================= */
+
+@media (min-width: 900px) {
+  .app {
+    padding-bottom: 35px;
+  }
+
+  .topbar {
+    padding-left: max(30px, calc((100vw - 980px) / 2 + 20px));
+    padding-right: max(30px, calc((100vw - 980px) / 2 + 20px));
+  }
+
+  .dashboard {
+    padding-top: 27px;
+  }
+
+  .bottom-nav {
+    position: static;
+
+    width: 100%;
+    max-width: 980px;
+
+    margin: 0 auto;
+
+    padding: 12px 0;
+
+    border: none;
+
+    box-shadow: none;
+
+    background: transparent;
+
+    backdrop-filter: none;
+  }
+
+  .bottom-nav button {
+    border: 1px solid transparent;
+  }
+
+  .bottom-nav button.active {
+    border-color: #eadfbd;
+  }
+
+  .more-shortcuts {
+    position: static;
+
+    max-width: 980px;
+
+    margin: 0 auto 20px;
+
+    justify-content: center;
+
+    pointer-events: auto;
+  }
+
+  .more-shortcuts button {
+    box-shadow: none;
+  }
+}
+
+/* =========================================================
+   SMALL MOBILE
+========================================================= */
+
+@media (max-width: 380px) {
+  .auth-page {
+    padding: 12px;
+  }
+
+  .auth-card {
+    padding: 27px 17px;
+    border-radius: 20px;
+  }
+
+  .auth-card h1 {
+    font-size: 26px;
+  }
+
+  .dashboard {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .topbar {
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+
+  .topbar h1 {
+    font-size: 18px;
+  }
+
+  .profile-button {
+    padding: 8px 9px;
+    font-size: 10px;
+  }
+
+  .stat-card {
+    padding: 13px;
+  }
+
+  .stat-card strong {
+    font-size: 16px;
+  }
+
+  .page-heading h2 {
+    font-size: 19px;
+  }
+
+  .gold-button,
+  .secondary-button,
+  .danger-button {
+    padding: 9px 10px;
+    font-size: 11px;
+  }
+       }
