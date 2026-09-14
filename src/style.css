@@ -327,3 +327,69 @@ button {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-form label {
+  margin-top: 8px;
+  color: #333333;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.profile-form input,
+.profile-form textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #dedede;
+  border-radius: 12px;
+  outline: none;
+  background: #ffffff;
+  color: #222222;
+  resize: vertical;
+}
+
+.profile-form input:focus,
+.profile-form textarea:focus {
+  border-color: #c9a227;
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.12);
+}
+
+.upload-placeholder {
+  margin-top: 16px;
+  padding: 22px 16px;
+  text-align: center;
+  border: 1px dashed #d8c78f;
+  border-radius: 16px;
+  background: #fffdf7;
+}
+
+.upload-icon {
+  font-size: 30px;
+  margin-bottom: 8px;
+}
+
+.upload-placeholder h3 {
+  margin: 5px 0;
+  color: #222222;
+}
+
+.upload-placeholder p {
+  margin: 0 auto 14px;
+  max-width: 300px;
+  color: #777777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.upload-placeholder button {
+  border: 1px solid #c9a227;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #a98216;
+  padding: 10px 16px;
+  font-weight: 700;
+  }
