@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -26,6 +26,19 @@ function App() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
 
+  // Logo and signature states
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [signatureUploading, setSignatureUploading] = useState(false);
+
+  const [logoMessage, setLogoMessage] = useState("");
+  const [signatureMessage, setSignatureMessage] = useState("");
+
+  const [logoPreview, setLogoPreview] = useState("");
+  const [signaturePreview, setSignaturePreview] = useState("");
+
+  const logoInputRef = useRef(null);
+  const signatureInputRef = useRef(null);
+
   useEffect(() => {
     async function getSession() {
       const { data } = await supabase.auth.getSession();
@@ -46,6 +59,64 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Load saved business profile
+  useEffect(() => {
+    async function loadBusinessProfile() {
+      if (!session?.user?.id) {
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("ss_business_profiles")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Profile loading error:", error);
+        return;
+      }
+
+      if (!data) {
+        return;
+      }
+
+      setBusinessName(
+        data.business_name || "Shareef Sons Events Organizer"
+      );
+
+      setPhone(data.phone || "");
+      setWhatsapp(data.whatsapp_number || "");
+      setAddress(data.address || "");
+
+      // Create temporary signed URL for private logo
+      if (data.logo_url) {
+        const { data: logoData, error: logoError } =
+          await supabase.storage
+            .from("ss-logos")
+            .createSignedUrl(data.logo_url, 3600);
+
+        if (!logoError && logoData?.signedUrl) {
+          setLogoPreview(logoData.signedUrl);
+        }
+      }
+
+      // Create temporary signed URL for private signature
+      if (data.signature_url) {
+        const { data: signatureData, error: signatureError } =
+          await supabase.storage
+            .from("ss-signatures")
+            .createSignedUrl(data.signature_url, 3600);
+
+        if (!signatureError && signatureData?.signedUrl) {
+          setSignaturePreview(signatureData.signedUrl);
+        }
+      }
+    }
+
+    loadBusinessProfile();
+  }, [session]);
 
   async function handleAuth(e) {
     e.preventDefault();
@@ -105,6 +176,9 @@ function App() {
     await supabase.auth.signOut();
     setSession(null);
     setCurrentPage("home");
+
+    setLogoPreview("");
+    setSignaturePreview("");
   }
 
   // Save Business Profile to Supabase
@@ -139,9 +213,172 @@ function App() {
     setProfileSaving(false);
   }
 
+  // Upload Logo
+  async function uploadLogo(file) {
+    if (!file) {
+      return;
+    }
+
+    setLogoMessage("");
+
+    if (!file.type.startsWith("image/")) {
+      setLogoMessage("❌ Please select an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoMessage("❌ Logo must be smaller than 5 MB.");
+      return;
+    }
+
+    setLogoUploading(true);
+
+    const userId = session.user.id;
+
+    const fileExtension =
+      file.name.split(".").pop()?.toLowerCase() || "png";
+
+    const filePath = `${userId}/logo-${Date.now()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("ss-logos")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type,
+      });
+
+    if (uploadError) {
+      console.error("Logo upload error:", uploadError);
+      setLogoMessage("❌ Logo upload failed: " + uploadError.message);
+      setLogoUploading(false);
+      return;
+    }
+
+    const { data: signedData, error: signedError } =
+      await supabase.storage
+        .from("ss-logos")
+        .createSignedUrl(filePath, 3600);
+
+    if (!signedError && signedData?.signedUrl) {
+      setLogoPreview(signedData.signedUrl);
+    }
+
+    const { error: profileError } = await supabase
+      .from("ss_business_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          business_name: businessName,
+          phone: phone,
+          whatsapp_number: whatsapp,
+          address: address,
+          logo_url: filePath,
+        },
+        {
+          onConflict: "user_id",
+        }
+      );
+
+    if (profileError) {
+      console.error("Logo profile save error:", profileError);
+      setLogoMessage(
+        "⚠️ Logo uploaded, but profile path could not be saved."
+      );
+    } else {
+      setLogoMessage("✅ Logo uploaded successfully.");
+    }
+
+    setLogoUploading(false);
+  }
+
+  // Upload Digital Signature
+  async function uploadSignature(file) {
+    if (!file) {
+      return;
+    }
+
+    setSignatureMessage("");
+
+    if (!file.type.startsWith("image/")) {
+      setSignatureMessage("❌ Please select an image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setSignatureMessage("❌ Signature must be smaller than 5 MB.");
+      return;
+    }
+
+    setSignatureUploading(true);
+
+    const userId = session.user.id;
+
+    const fileExtension =
+      file.name.split(".").pop()?.toLowerCase() || "png";
+
+    const filePath =
+      `${userId}/signature-${Date.now()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("ss-signatures")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type,
+      });
+
+    if (uploadError) {
+      console.error("Signature upload error:", uploadError);
+      setSignatureMessage(
+        "❌ Signature upload failed: " + uploadError.message
+      );
+      setSignatureUploading(false);
+      return;
+    }
+
+    const { data: signedData, error: signedError } =
+      await supabase.storage
+        .from("ss-signatures")
+        .createSignedUrl(filePath, 3600);
+
+    if (!signedError && signedData?.signedUrl) {
+      setSignaturePreview(signedData.signedUrl);
+    }
+
+    const { error: profileError } = await supabase
+      .from("ss_business_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          business_name: businessName,
+          phone: phone,
+          whatsapp_number: whatsapp,
+          address: address,
+          signature_url: filePath,
+        },
+        {
+          onConflict: "user_id",
+        }
+      );
+
+    if (profileError) {
+      console.error("Signature profile save error:", profileError);
+      setSignatureMessage(
+        "⚠️ Signature uploaded, but profile path could not be saved."
+      );
+    } else {
+      setSignatureMessage("✅ Digital signature uploaded successfully.");
+    }
+
+    setSignatureUploading(false);
+  }
+
   function showSettings() {
     setCurrentPage("settings");
     setProfileMessage("");
+    setLogoMessage("");
+    setSignatureMessage("");
   }
 
   function showHome() {
@@ -295,30 +532,114 @@ function App() {
                 rows="4"
               />
 
+              {/* BUSINESS LOGO */}
               <div className="upload-placeholder">
                 <div className="upload-icon">🖼️</div>
 
                 <h3>Business Logo</h3>
 
+                {logoPreview && (
+                  <img
+                    src={logoPreview}
+                    alt="Business Logo"
+                    style={{
+                      width: "140px",
+                      maxHeight: "140px",
+                      objectFit: "contain",
+                      display: "block",
+                      margin: "15px auto",
+                      borderRadius: "12px",
+                      border: "1px solid #ddd",
+                      padding: "8px",
+                    }}
+                  />
+                )}
+
                 <p>
-                  Logo upload will be connected to Supabase Storage in the next
-                  step.
+                  Upload your business logo from your mobile gallery.
+                  Maximum size: 5 MB.
                 </p>
 
-                <button type="button">Choose Logo</button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    uploadLogo(e.target.files?.[0]);
+
+                    e.target.value = "";
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoUploading}
+                >
+                  {logoUploading ? "Uploading..." : "Choose Logo"}
+                </button>
+
+                {logoMessage && (
+                  <p className="auth-message">{logoMessage}</p>
+                )}
               </div>
 
+              {/* DIGITAL SIGNATURE */}
               <div className="upload-placeholder">
                 <div className="upload-icon">✍️</div>
 
                 <h3>Digital Signature</h3>
 
+                {signaturePreview && (
+                  <img
+                    src={signaturePreview}
+                    alt="Digital Signature"
+                    style={{
+                      width: "180px",
+                      maxHeight: "100px",
+                      objectFit: "contain",
+                      display: "block",
+                      margin: "15px auto",
+                      borderRadius: "12px",
+                      border: "1px solid #ddd",
+                      padding: "8px",
+                    }}
+                  />
+                )}
+
                 <p>
-                  Signature upload will be connected to Supabase Storage in the
-                  next step.
+                  Upload your digital signature from your mobile gallery.
+                  Maximum size: 5 MB.
                 </p>
 
-                <button type="button">Choose Signature</button>
+                <input
+                  ref={signatureInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    uploadSignature(e.target.files?.[0]);
+
+                    e.target.value = "";
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => signatureInputRef.current?.click()}
+                  disabled={signatureUploading}
+                >
+                  {signatureUploading
+                    ? "Uploading..."
+                    : "Choose Signature"}
+                </button>
+
+                {signatureMessage && (
+                  <p className="auth-message">
+                    {signatureMessage}
+                  </p>
+                )}
               </div>
 
               <button
@@ -327,7 +648,9 @@ function App() {
                 onClick={saveBusinessProfile}
                 disabled={profileSaving}
               >
-                {profileSaving ? "Saving..." : "Save Business Profile"}
+                {profileSaving
+                  ? "Saving..."
+                  : "Save Business Profile"}
               </button>
 
               {profileMessage && (
