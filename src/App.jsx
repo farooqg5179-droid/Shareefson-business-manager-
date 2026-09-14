@@ -210,4 +210,61 @@ function App() {
           <button
             className={!isSignup ? "active" : ""}
             onClick={() => {
-             
+              setIsSignup(false);
+              setError("");
+              setMessage("");
+            }}
+          >
+            Login
+          </button>
+
+          <button
+            className={isSignup ? "active" : ""}
+            onClick={() => {
+              setIsSignup(true);
+              setError("");
+              setMessage("");
+            }}
+          >
+            Signup
+          </button>
+        </div>
+
+        <form onSubmit={handleAuth}>
+          {isSignup && (
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          )}
+
+          <input
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          {error && <p className="auth-error">{error}</p>}
+
+          {message && <p className="auth-message">{message}</p>}
+
+          <button className="auth-submit" type="submit">
+            {isSignup ? "Create Account" : "Login"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default App;
