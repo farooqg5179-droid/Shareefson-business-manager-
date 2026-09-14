@@ -13,6 +13,15 @@ function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const [currentPage, setCurrentPage] = useState("home");
+
+  const [businessName, setBusinessName] = useState(
+    "Shareef Sons Events Organizer"
+  );
+  const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [address, setAddress] = useState("");
+
   useEffect(() => {
     async function getSession() {
       const { data } = await supabase.auth.getSession();
@@ -91,6 +100,15 @@ function App() {
   async function handleLogout() {
     await supabase.auth.signOut();
     setSession(null);
+    setCurrentPage("home");
+  }
+
+  function showSettings() {
+    setCurrentPage("settings");
+  }
+
+  function showHome() {
+    setCurrentPage("home");
   }
 
   if (loading) {
@@ -103,166 +121,264 @@ function App() {
     );
   }
 
-  if (session) {
+  if (!session) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <p className="eyebrow">SHAREEF SONS</p>
+
+          <h1>Business Manager</h1>
+
+          <p className="auth-subtitle">
+            Manage your events, customers, bookings and finances.
+          </p>
+
+          <div className="auth-tabs">
+            <button
+              className={!isSignup ? "active" : ""}
+              onClick={() => {
+                setIsSignup(false);
+                setError("");
+                setMessage("");
+              }}
+            >
+              Login
+            </button>
+
+            <button
+              className={isSignup ? "active" : ""}
+              onClick={() => {
+                setIsSignup(true);
+                setError("");
+                setMessage("");
+              }}
+            >
+              Signup
+            </button>
+          </div>
+
+          <form onSubmit={handleAuth}>
+            {isSignup && (
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+
+            <input
+              type="email"
+              placeholder="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            {error && <p className="auth-error">{error}</p>}
+
+            {message && <p className="auth-message">{message}</p>}
+
+            <button className="auth-submit" type="submit">
+              {isSignup ? "Create Account" : "Login"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === "settings") {
     return (
       <div className="app">
         <header className="topbar">
           <div>
-            <p className="eyebrow">SHAREEF SONS</p>
-            <h1>Business Manager</h1>
+            <p className="eyebrow">SETTINGS</p>
+            <h1>Business Profile</h1>
           </div>
 
-          <button className="profile-button" onClick={handleLogout}>
-            Logout
+          <button className="profile-button" onClick={showHome}>
+            ← Back
           </button>
         </header>
 
         <main className="dashboard">
           <section className="welcome-card">
-            <p>Welcome back</p>
-            <h2>Shareef Sons Events Organizer</h2>
-            <span>{session.user.email}</span>
-          </section>
-
-          <section className="stats-grid">
-            <div className="stat-card">
-              <span>Bookings</span>
-              <strong>0</strong>
-            </div>
-
-            <div className="stat-card">
-              <span>Income</span>
-              <strong>Rs. 0</strong>
-            </div>
-
-            <div className="stat-card">
-              <span>Expenses</span>
-              <strong>Rs. 0</strong>
-            </div>
-
-            <div className="stat-card">
-              <span>Pending</span>
-              <strong>Rs. 0</strong>
-            </div>
+            <p>BUSINESS INFORMATION</p>
+            <h2>Business Profile</h2>
+            <span>
+              Add your business details. We will connect saving and uploads in
+              the next step.
+            </span>
           </section>
 
           <section className="section">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">QUICK ACTIONS</p>
-                <h2>Manage Business</h2>
-              </div>
-            </div>
+            <div className="profile-form">
+              <label>Business Name</label>
 
-            <div className="actions-grid">
-              <button>+ New Customer</button>
-              <button>+ New Booking</button>
-              <button>+ Create Invoice</button>
-              <button>+ Payment In</button>
-              <button>+ Payment Out</button>
-              <button>+ Add Note</button>
+              <input
+                type="text"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="Business Name"
+              />
+
+              <label>Phone Number</label>
+
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="03XX XXXXXXX"
+              />
+
+              <label>WhatsApp Number</label>
+
+              <input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="03XX XXXXXXX"
+              />
+
+              <label>Business Address</label>
+
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter business address"
+                rows="4"
+              />
+
+              <div className="upload-placeholder">
+                <div className="upload-icon">🖼️</div>
+
+                <h3>Business Logo</h3>
+
+                <p>
+                  Logo upload will be connected to Supabase Storage in the next
+                  step.
+                </p>
+
+                <button type="button">Choose Logo</button>
+              </div>
+
+              <div className="upload-placeholder">
+                <div className="upload-icon">✍️</div>
+
+                <h3>Digital Signature</h3>
+
+                <p>
+                  Signature upload will be connected to Supabase Storage in the
+                  next step.
+                </p>
+
+                <button type="button">Choose Signature</button>
+              </div>
+
+              <button className="auth-submit" type="button">
+                Save Business Profile
+              </button>
             </div>
           </section>
         </main>
-
-        <nav className="bottom-nav">
-          <button>
-            ⌂
-            <span>Home</span>
-          </button>
-
-          <button>
-            👥
-            <span>Customers</span>
-          </button>
-
-          <button>
-            📅
-            <span>Bookings</span>
-          </button>
-
-          <button>
-            🧾
-            <span>Invoices</span>
-          </button>
-
-          <button>
-            ⚙️
-            <span>Settings</span>
-          </button>
-        </nav>
       </div>
     );
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <p className="eyebrow">SHAREEF SONS</p>
-
-        <h1>Business Manager</h1>
-
-        <p className="auth-subtitle">
-          Manage your events, customers, bookings and finances.
-        </p>
-
-        <div className="auth-tabs">
-          <button
-            className={!isSignup ? "active" : ""}
-            onClick={() => {
-              setIsSignup(false);
-              setError("");
-              setMessage("");
-            }}
-          >
-            Login
-          </button>
-
-          <button
-            className={isSignup ? "active" : ""}
-            onClick={() => {
-              setIsSignup(true);
-              setError("");
-              setMessage("");
-            }}
-          >
-            Signup
-          </button>
+    <div className="app">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">SHAREEF SONS</p>
+          <h1>Business Manager</h1>
         </div>
 
-        <form onSubmit={handleAuth}>
-          {isSignup && (
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          )}
+        <button className="profile-button" onClick={handleLogout}>
+          Logout
+        </button>
+      </header>
 
-          <input
-            type="email"
-            placeholder="Email Address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+      <main className="dashboard">
+        <section className="welcome-card">
+          <p>WELCOME BACK</p>
+          <h2>Shareef Sons Events Organizer</h2>
+          <span>{session.user.email}</span>
+        </section>
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <section className="stats-grid">
+          <div className="stat-card">
+            <span>Bookings</span>
+            <strong>0</strong>
+          </div>
 
-          {error && <p className="auth-error">{error}</p>}
+          <div className="stat-card">
+            <span>Income</span>
+            <strong>Rs. 0</strong>
+          </div>
 
-          {message && <p className="auth-message">{message}</p>}
+          <div className="stat-card">
+            <span>Expenses</span>
+            <strong>Rs. 0</strong>
+          </div>
 
-          <button className="auth-submit" type="submit">
-            {isSignup ? "Create Account" : "Login"}
-          </button>
-        </form>
-      </div>
+          <div className="stat-card">
+            <span>Pending</span>
+            <strong>Rs. 0</strong>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">QUICK ACTIONS</p>
+              <h2>Manage Business</h2>
+            </div>
+          </div>
+
+          <div className="actions-grid">
+            <button>+ New Customer</button>
+            <button>+ New Booking</button>
+            <button>+ Create Invoice</button>
+            <button>+ Payment In</button>
+            <button>+ Payment Out</button>
+            <button>+ Add Note</button>
+          </div>
+        </section>
+      </main>
+
+      <nav className="bottom-nav">
+        <button onClick={showHome}>
+          ⌂
+          <span>Home</span>
+        </button>
+
+        <button>
+          👥
+          <span>Customers</span>
+        </button>
+
+        <button>
+          📅
+          <span>Bookings</span>
+        </button>
+
+        <button>
+          🧾
+          <span>Invoices</span>
+        </button>
+
+        <button onClick={showSettings}>
+          ⚙️
+          <span>Settings</span>
+        </button>
+      </nav>
     </div>
   );
 }
