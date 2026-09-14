@@ -39,6 +39,27 @@ function App() {
   const logoInputRef = useRef(null);
   const signatureInputRef = useRef(null);
 
+  // ---------------------------------------------------
+  // CUSTOMERS
+  // ---------------------------------------------------
+
+  const [customers, setCustomers] = useState([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerWhatsapp, setCustomerWhatsapp] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerNotes, setCustomerNotes] = useState("");
+
+  const [customerMessage, setCustomerMessage] = useState("");
+
+  // ---------------------------------------------------
+  // SESSION
+  // ---------------------------------------------------
+
   useEffect(() => {
     async function getSession() {
       const { data } = await supabase.auth.getSession();
@@ -60,7 +81,10 @@ function App() {
     };
   }, []);
 
-  // Load saved business profile
+  // ---------------------------------------------------
+  // LOAD BUSINESS PROFILE
+  // ---------------------------------------------------
+
   useEffect(() => {
     async function loadBusinessProfile() {
       if (!session?.user?.id) {
@@ -118,6 +142,48 @@ function App() {
     loadBusinessProfile();
   }, [session]);
 
+  // ---------------------------------------------------
+  // LOAD CUSTOMERS
+  // ---------------------------------------------------
+
+  async function loadCustomers() {
+    if (!session?.user?.id) {
+      return;
+    }
+
+    setCustomersLoading(true);
+    setCustomerMessage("");
+
+    const { data, error } = await supabase
+      .from("ss_customers")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Customers loading error:", error);
+
+      setCustomerMessage(
+        "❌ Customers load failed: " + error.message
+      );
+    } else {
+      setCustomers(data || []);
+    }
+
+    setCustomersLoading(false);
+  }
+
+  // Load customers when Customers page opens
+  useEffect(() => {
+    if (currentPage === "customers" && session?.user?.id) {
+      loadCustomers();
+    }
+  }, [currentPage, session]);
+
+  // ---------------------------------------------------
+  // AUTH
+  // ---------------------------------------------------
+
   async function handleAuth(e) {
     e.preventDefault();
 
@@ -172,8 +238,13 @@ function App() {
     }
   }
 
+  // ---------------------------------------------------
+  // LOGOUT
+  // ---------------------------------------------------
+
   async function handleLogout() {
     await supabase.auth.signOut();
+
     setSession(null);
     setCurrentPage("home");
 
@@ -181,7 +252,10 @@ function App() {
     setSignaturePreview("");
   }
 
-  // Save Business Profile to Supabase
+  // ---------------------------------------------------
+  // SAVE BUSINESS PROFILE
+  // ---------------------------------------------------
+
   async function saveBusinessProfile() {
     setProfileSaving(true);
     setProfileMessage("");
@@ -205,15 +279,23 @@ function App() {
 
     if (error) {
       console.error(error);
-      setProfileMessage("❌ Profile save failed: " + error.message);
+
+      setProfileMessage(
+        "❌ Profile save failed: " + error.message
+      );
     } else {
-      setProfileMessage("✅ Business profile saved successfully.");
+      setProfileMessage(
+        "✅ Business profile saved successfully."
+      );
     }
 
     setProfileSaving(false);
   }
 
-  // Upload Logo
+  // ---------------------------------------------------
+  // UPLOAD LOGO
+  // ---------------------------------------------------
+
   async function uploadLogo(file) {
     if (!file) {
       return;
@@ -250,7 +332,11 @@ function App() {
 
     if (uploadError) {
       console.error("Logo upload error:", uploadError);
-      setLogoMessage("❌ Logo upload failed: " + uploadError.message);
+
+      setLogoMessage(
+        "❌ Logo upload failed: " + uploadError.message
+      );
+
       setLogoUploading(false);
       return;
     }
@@ -282,6 +368,7 @@ function App() {
 
     if (profileError) {
       console.error("Logo profile save error:", profileError);
+
       setLogoMessage(
         "⚠️ Logo uploaded, but profile path could not be saved."
       );
@@ -292,7 +379,10 @@ function App() {
     setLogoUploading(false);
   }
 
-  // Upload Digital Signature
+  // ---------------------------------------------------
+  // UPLOAD DIGITAL SIGNATURE
+  // ---------------------------------------------------
+
   async function uploadSignature(file) {
     if (!file) {
       return;
@@ -306,7 +396,10 @@ function App() {
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setSignatureMessage("❌ Signature must be smaller than 5 MB.");
+      setSignatureMessage(
+        "❌ Signature must be smaller than 5 MB."
+      );
+
       return;
     }
 
@@ -329,10 +422,16 @@ function App() {
       });
 
     if (uploadError) {
-      console.error("Signature upload error:", uploadError);
-      setSignatureMessage(
-        "❌ Signature upload failed: " + uploadError.message
+      console.error(
+        "Signature upload error:",
+        uploadError
       );
+
+      setSignatureMessage(
+        "❌ Signature upload failed: " +
+          uploadError.message
+      );
+
       setSignatureUploading(false);
       return;
     }
@@ -363,27 +462,49 @@ function App() {
       );
 
     if (profileError) {
-      console.error("Signature profile save error:", profileError);
+      console.error(
+        "Signature profile save error:",
+        profileError
+      );
+
       setSignatureMessage(
         "⚠️ Signature uploaded, but profile path could not be saved."
       );
     } else {
-      setSignatureMessage("✅ Digital signature uploaded successfully.");
+      setSignatureMessage(
+        "✅ Digital signature uploaded successfully."
+      );
     }
 
     setSignatureUploading(false);
   }
 
+  // ---------------------------------------------------
+  // NAVIGATION
+  // ---------------------------------------------------
+
   function showSettings() {
     setCurrentPage("settings");
+
     setProfileMessage("");
     setLogoMessage("");
     setSignatureMessage("");
   }
 
+  function showCustomers() {
+    setCurrentPage("customers");
+
+    setShowCustomerForm(false);
+    setCustomerMessage("");
+  }
+
   function showHome() {
     setCurrentPage("home");
   }
+
+  // ---------------------------------------------------
+  // LOADING
+  // ---------------------------------------------------
 
   if (loading) {
     return (
@@ -394,6 +515,10 @@ function App() {
       </div>
     );
   }
+
+  // ---------------------------------------------------
+  // LOGIN / SIGNUP
+  // ---------------------------------------------------
 
   if (!session) {
     return (
@@ -455,12 +580,25 @@ function App() {
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            {error && <p className="auth-error">{error}</p>}
+            {error && (
+              <p className="auth-error">
+                {error}
+              </p>
+            )}
 
-            {message && <p className="auth-message">{message}</p>}
+            {message && (
+              <p className="auth-message">
+                {message}
+              </p>
+            )}
 
-            <button className="auth-submit" type="submit">
-              {isSignup ? "Create Account" : "Login"}
+            <button
+              className="auth-submit"
+              type="submit"
+            >
+              {isSignup
+                ? "Create Account"
+                : "Login"}
             </button>
           </form>
         </div>
@@ -468,16 +606,252 @@ function App() {
     );
   }
 
+  // ---------------------------------------------------
+  // CUSTOMERS PAGE
+  // ---------------------------------------------------
+
+  if (currentPage === "customers") {
+    return (
+      <div className="app">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">CUSTOMERS</p>
+
+            <h1>Customers</h1>
+          </div>
+
+          <button
+            className="profile-button"
+            onClick={showHome}
+          >
+            ← Back
+          </button>
+        </header>
+
+        <main className="dashboard">
+          <section className="welcome-card">
+            <p>CUSTOMER MANAGEMENT</p>
+
+            <h2>Your Customers</h2>
+
+            <span>
+              Add and manage your event customers from one
+              place.
+            </span>
+          </section>
+
+          <section className="section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">CUSTOMERS</p>
+
+                <h2>Customer List</h2>
+              </div>
+
+              <button
+                className="profile-button"
+                onClick={() => {
+                  setShowCustomerForm(
+                    !showCustomerForm
+                  );
+
+                  setCustomerMessage("");
+                }}
+              >
+                + New Customer
+              </button>
+            </div>
+
+            {showCustomerForm && (
+              <div className="profile-form">
+                <label>Customer Name</label>
+
+                <input
+                  type="text"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) =>
+                    setCustomerName(e.target.value)
+                  }
+                />
+
+                <label>Phone Number</label>
+
+                <input
+                  type="tel"
+                  placeholder="03XX XXXXXXX"
+                  value={customerPhone}
+                  onChange={(e) =>
+                    setCustomerPhone(e.target.value)
+                  }
+                />
+
+                <label>WhatsApp Number</label>
+
+                <input
+                  type="tel"
+                  placeholder="03XX XXXXXXX"
+                  value={customerWhatsapp}
+                  onChange={(e) =>
+                    setCustomerWhatsapp(
+                      e.target.value
+                    )
+                  }
+                />
+
+                <label>Address</label>
+
+                <textarea
+                  placeholder="Customer address"
+                  rows="3"
+                  value={customerAddress}
+                  onChange={(e) =>
+                    setCustomerAddress(
+                      e.target.value
+                    )
+                  }
+                />
+
+                <label>Notes</label>
+
+                <textarea
+                  placeholder="Additional notes"
+                  rows="3"
+                  value={customerNotes}
+                  onChange={(e) =>
+                    setCustomerNotes(
+                      e.target.value
+                    )
+                  }
+                />
+
+                <button
+                  className="auth-submit"
+                  type="button"
+                  onClick={() => {
+                    setCustomerMessage(
+                      "Customer save will be connected in Step 8B."
+                    );
+                  }}
+                >
+                  Save Customer
+                </button>
+
+                {customerMessage && (
+                  <p className="auth-message">
+                    {customerMessage}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="section">
+            {customerMessage &&
+              !showCustomerForm && (
+                <p className="auth-message">
+                  {customerMessage}
+                </p>
+              )}
+
+            {customersLoading ? (
+              <div className="welcome-card">
+                <p>Loading customers...</p>
+              </div>
+            ) : customers.length === 0 ? (
+              <div className="welcome-card">
+                <p className="eyebrow">
+                  NO CUSTOMERS
+                </p>
+
+                <h2>No customers yet</h2>
+
+                <span>
+                  Click "+ New Customer" to add your
+                  first customer.
+                </span>
+              </div>
+            ) : (
+              <div className="actions-grid">
+                {customers.map((customer) => (
+                  <div
+                    className="stat-card"
+                    key={customer.id}
+                  >
+                    <span>
+                      {customer.name ||
+                        "Unnamed Customer"}
+                    </span>
+
+                    <strong>
+                      {customer.phone ||
+                        "No phone"}
+                    </strong>
+
+                    {customer.whatsapp_number && (
+                      <small>
+                        WhatsApp:{" "}
+                        {customer.whatsapp_number}
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+
+        <nav className="bottom-nav">
+          <button onClick={showHome}>
+            ⌂
+            <span>Home</span>
+          </button>
+
+          <button
+            className="active"
+            onClick={showCustomers}
+          >
+            👥
+            <span>Customers</span>
+          </button>
+
+          <button>
+            📅
+            <span>Bookings</span>
+          </button>
+
+          <button>
+            🧾
+            <span>Invoices</span>
+          </button>
+
+          <button onClick={showSettings}>
+            ⚙️
+            <span>Settings</span>
+          </button>
+        </nav>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------
+  // SETTINGS PAGE
+  // ---------------------------------------------------
+
   if (currentPage === "settings") {
     return (
       <div className="app">
         <header className="topbar">
           <div>
             <p className="eyebrow">SETTINGS</p>
+
             <h1>Business Profile</h1>
           </div>
 
-          <button className="profile-button" onClick={showHome}>
+          <button
+            className="profile-button"
+            onClick={showHome}
+          >
             ← Back
           </button>
         </header>
@@ -489,8 +863,9 @@ function App() {
             <h2>Business Profile</h2>
 
             <span>
-              Add your business details. Your information will be securely
-              saved to your business account.
+              Add your business details. Your
+              information will be securely saved to
+              your business account.
             </span>
           </section>
 
@@ -501,7 +876,9 @@ function App() {
               <input
                 type="text"
                 value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
+                onChange={(e) =>
+                  setBusinessName(e.target.value)
+                }
                 placeholder="Business Name"
               />
 
@@ -510,7 +887,9 @@ function App() {
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) =>
+                  setPhone(e.target.value)
+                }
                 placeholder="03XX XXXXXXX"
               />
 
@@ -519,7 +898,9 @@ function App() {
               <input
                 type="tel"
                 value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
+                onChange={(e) =>
+                  setWhatsapp(e.target.value)
+                }
                 placeholder="03XX XXXXXXX"
               />
 
@@ -527,14 +908,19 @@ function App() {
 
               <textarea
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) =>
+                  setAddress(e.target.value)
+                }
                 placeholder="Enter business address"
                 rows="4"
               />
 
               {/* BUSINESS LOGO */}
+
               <div className="upload-placeholder">
-                <div className="upload-icon">🖼️</div>
+                <div className="upload-icon">
+                  🖼️
+                </div>
 
                 <h3>Business Logo</h3>
 
@@ -556,8 +942,9 @@ function App() {
                 )}
 
                 <p>
-                  Upload your business logo from your mobile gallery.
-                  Maximum size: 5 MB.
+                  Upload your business logo from
+                  your mobile gallery. Maximum size:
+                  5 MB.
                 </p>
 
                 <input
@@ -566,7 +953,9 @@ function App() {
                   accept="image/*"
                   style={{ display: "none" }}
                   onChange={(e) => {
-                    uploadLogo(e.target.files?.[0]);
+                    uploadLogo(
+                      e.target.files?.[0]
+                    );
 
                     e.target.value = "";
                   }}
@@ -574,20 +963,29 @@ function App() {
 
                 <button
                   type="button"
-                  onClick={() => logoInputRef.current?.click()}
+                  onClick={() =>
+                    logoInputRef.current?.click()
+                  }
                   disabled={logoUploading}
                 >
-                  {logoUploading ? "Uploading..." : "Choose Logo"}
+                  {logoUploading
+                    ? "Uploading..."
+                    : "Choose Logo"}
                 </button>
 
                 {logoMessage && (
-                  <p className="auth-message">{logoMessage}</p>
+                  <p className="auth-message">
+                    {logoMessage}
+                  </p>
                 )}
               </div>
 
               {/* DIGITAL SIGNATURE */}
+
               <div className="upload-placeholder">
-                <div className="upload-icon">✍️</div>
+                <div className="upload-icon">
+                  ✍️
+                </div>
 
                 <h3>Digital Signature</h3>
 
@@ -609,8 +1007,9 @@ function App() {
                 )}
 
                 <p>
-                  Upload your digital signature from your mobile gallery.
-                  Maximum size: 5 MB.
+                  Upload your digital signature from
+                  your mobile gallery. Maximum size:
+                  5 MB.
                 </p>
 
                 <input
@@ -619,7 +1018,9 @@ function App() {
                   accept="image/*"
                   style={{ display: "none" }}
                   onChange={(e) => {
-                    uploadSignature(e.target.files?.[0]);
+                    uploadSignature(
+                      e.target.files?.[0]
+                    );
 
                     e.target.value = "";
                   }}
@@ -627,7 +1028,9 @@ function App() {
 
                 <button
                   type="button"
-                  onClick={() => signatureInputRef.current?.click()}
+                  onClick={() =>
+                    signatureInputRef.current?.click()
+                  }
                   disabled={signatureUploading}
                 >
                   {signatureUploading
@@ -654,7 +1057,9 @@ function App() {
               </button>
 
               {profileMessage && (
-                <p className="auth-message">{profileMessage}</p>
+                <p className="auth-message">
+                  {profileMessage}
+                </p>
               )}
             </div>
           </section>
@@ -662,6 +1067,10 @@ function App() {
       </div>
     );
   }
+
+  // ---------------------------------------------------
+  // HOME PAGE
+  // ---------------------------------------------------
 
   return (
     <div className="app">
@@ -672,7 +1081,10 @@ function App() {
           <h1>Business Manager</h1>
         </div>
 
-        <button className="profile-button" onClick={handleLogout}>
+        <button
+          className="profile-button"
+          onClick={handleLogout}
+        >
           Logout
         </button>
       </header>
@@ -681,7 +1093,9 @@ function App() {
         <section className="welcome-card">
           <p>WELCOME BACK</p>
 
-          <h2>Shareef Sons Events Organizer</h2>
+          <h2>
+            Shareef Sons Events Organizer
+          </h2>
 
           <span>{session.user.email}</span>
         </section>
@@ -715,24 +1129,40 @@ function App() {
         <section className="section">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">QUICK ACTIONS</p>
+              <p className="eyebrow">
+                QUICK ACTIONS
+              </p>
 
               <h2>Manage Business</h2>
             </div>
           </div>
 
           <div className="actions-grid">
-            <button>+ New Customer</button>
+            <button
+              onClick={showCustomers}
+            >
+              + New Customer
+            </button>
 
-            <button>+ New Booking</button>
+            <button>
+              + New Booking
+            </button>
 
-            <button>+ Create Invoice</button>
+            <button>
+              + Create Invoice
+            </button>
 
-            <button>+ Payment In</button>
+            <button>
+              + Payment In
+            </button>
 
-            <button>+ Payment Out</button>
+            <button>
+              + Payment Out
+            </button>
 
-            <button>+ Add Note</button>
+            <button>
+              + Add Note
+            </button>
           </div>
         </section>
       </main>
@@ -743,7 +1173,7 @@ function App() {
           <span>Home</span>
         </button>
 
-        <button>
+        <button onClick={showCustomers}>
           👥
           <span>Customers</span>
         </button>
