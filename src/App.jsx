@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "./lib/supabase";
+import { supabase, supabaseConfigError } from "./lib/supabase";
 import "./App.css";
 
 const EVENT_TYPES = [
@@ -295,6 +295,10 @@ function App() {
     let mounted = true;
 
     async function init() {
+      if (supabaseConfigError || !supabase) {
+        if (mounted) setLoading(false);
+        return;
+      }
       const { data } = await supabase.auth.getSession();
       if (mounted) {
         setSession(data.session);
@@ -1204,6 +1208,19 @@ function App() {
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
+  }
+
+  if (supabaseConfigError || !supabase) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <p className="eyebrow">SHAREEF SONS</p>
+          <h1>App Configuration Missing</h1>
+          <p className="auth-subtitle">The Android build does not have the Supabase configuration. Add the GitHub Actions secrets VITE_SUPABASE_URL and VITE_SUPABASE_KEY, then build a new APK.</p>
+          <p className="auth-error">Do not put your Supabase secret/service-role key here. Use the publishable/anon key for the app.</p>
+        </div>
+      </div>
+    );
   }
 
   if (!session) {
