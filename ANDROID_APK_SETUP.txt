@@ -1,20 +1,17 @@
 SHAREEF SONS BUSINESS MANAGER — ANDROID APK SETUP
 
-This package prepares the existing React + Vite project for Capacitor Android packaging.
+This project is prepared for Capacitor Android packaging.
 
-IMPORTANT:
-- Existing React/Supabase source files were kept.
-- Capacitor configuration was added.
-- Android native project is NOT included yet because it must be generated after npm install.
+IMPORTANT — WHITE SCREEN FIX:
+The Android APK is built by GitHub Actions, so Vercel's environment variables are NOT automatically available to the APK build.
+Before running the Android workflow, add these two GitHub repository secrets:
 
-NEXT STEPS:
-1. Upload/replace these project files in GitHub.
-2. In a Node-capable environment run:
-   npm install
-   npm run build
-   npx cap add android
-   npx cap sync android
-3. Then build the Android APK/AAB using Android Studio or a cloud Android build service.
+1. VITE_SUPABASE_URL = your Supabase Project URL
+2. VITE_SUPABASE_KEY = your Supabase publishable/anon key used by the web app
+
+Do NOT put the Supabase secret/service-role key in the React app or in GitHub source files.
+
+The workflow now stops with a clear error if either required build variable is missing.
 
 APP ID:
 com.shareefsons.businessmanager
@@ -22,4 +19,18 @@ com.shareefsons.businessmanager
 APP NAME:
 Shareef Sons Business Manager
 
-For the final professional release, add the Shareef Sons logo as Android launcher icon and create a branded splash screen before the production build.
+APP ICON:
+The supplied Shareef Sons gold crown + SS logo is included at:
+resources/icon.png
+
+The workflow automatically generates the Android launcher icon from this logo.
+
+BUILD STEPS USED BY GITHUB ACTIONS:
+1. npm install
+2. Check VITE_SUPABASE_URL and VITE_SUPABASE_KEY
+3. npm run build
+4. npx cap add android
+5. npx capacitor-assets generate --android
+6. npx cap sync android
+7. ./gradlew assembleDebug
+8. Upload APK artifact
