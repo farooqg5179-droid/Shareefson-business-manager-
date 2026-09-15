@@ -16,7 +16,7 @@ const emptyBooking = {
   customer_id: "", customer_name: "", event_type: "Wedding", event_date: "", event_time: "",
   venue: "", guests: 0, package_name: "", services: "",
   total_amount: 0, advance_amount: 0, remaining_amount: 0,
-  status: "Pending", reminder_enabled: false, reminder_date: "", reminder_time: "", reminder_note: "", custom_data: {}, notes: ""
+  status: "Pending", reminder_enabled: false, reminder_date: "", reminder_time: "", reminder_note: "", custom_data: {}, attachments: [], notes: ""
 };
 
 const emptyInvoice = {
@@ -24,7 +24,7 @@ const emptyInvoice = {
   invoice_date: new Date().toISOString().slice(0, 10),
   event_type: "Wedding", event_date: "", event_time: "",
   venue: "", items: "", subtotal: 0, discount: 0, total_amount: 0, custom_data: {},
-  paid_amount: 0, remaining_amount: 0, due_date: "", notes: ""
+  paid_amount: 0, remaining_amount: 0, due_date: "", custom_data: {}, attachments: [], notes: ""
 };
 
 function money(value) {
@@ -40,21 +40,47 @@ function calcRemaining(total, paid) {
 }
 
 function CustomFields({ fields = [], data = {}, onChange, section, onAdd }) {
+  if (!fields.length) {
+    return (
+      <div className="custom-setup-card">
+        <strong>Add your custom fields</strong>
+        <span>Type your own field name and add it only when your business needs it.</span>
+        {onAdd && <button type="button" className="custom-setup-button" onClick={() => onAdd(section)}>＋ Add Custom Field</button>}
+      </div>
+    );
+  }
   return (
     <div className="custom-record-fields">
-      {!fields.length ? (
-        <div className="custom-empty">
-          <strong>No custom fields</strong>
-          <span>This section is kept simple. Add only the fields your business needs.</span>
-          {onAdd && <button type="button" className="secondary-button" onClick={() => onAdd(section)}>＋ Add Custom Field</button>}
-        </div>
-      ) : fields.map(f => (
+      <div className="custom-record-heading"><strong>Custom Fields</strong><span>Only the fields you created are shown here.</span></div>
+      {fields.map(f => (
         <div key={f.id}>
           <label>{f.label}</label>
           <input value={data?.[f.id] || ""} placeholder={f.label} onChange={e => onChange({ ...data, [f.id]: e.target.value })} />
         </div>
       ))}
-      {!!fields.length && onAdd && <button type="button" className="custom-add-inline" onClick={() => onAdd(section)}>＋ Add another custom field</button>}
+    </div>
+  );
+}
+
+function AttachmentUploader({ section, attachments = [], onUpload, onRemove, uploading, message }) {
+  const inputRef = useRef(null);
+  return (
+    <div className="attachment-card">
+      <div className="attachment-head"><div><strong>Files & Images</strong><span>Upload photos, PDFs or other files for this {section}.</span></div><button type="button" className="secondary-button" onClick={() => inputRef.current?.click()} disabled={uploading}>{uploading ? "Uploading..." : "＋ Add File"}</button></div>
+      <input ref={inputRef} type="file" hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={e => { const file=e.target.files?.[0]; if(file) onUpload(file, section); e.target.value=""; }} />
+      {message && <p className="form-message">{message}</p>}
+      {attachments.length > 0 && <div className="attachment-list">{attachments.map(a => <div className="attachment-item" key={a.id || a.path}><div className="attachment-thumb">{String(a.type || "").startsWith("image/") ? <img src={a.url} alt={a.name} /> : <span>FILE</span>}</div><div className="attachment-info"><strong>{a.name}</strong><small>{a.type || "File"}</small><div className="button-row compact"><ImageActions url={a.url} label={a.name} /><button type="button" className="mini-danger" onClick={() => onRemove(section, a.id)}>Remove</button></div></div></div>)}</div>}
+    </div>
+  );
+}
+
+function SectionSetup({ section, onAdd }) {
+  return (
+    <div className="section-setup-screen">
+      <div className="section-setup-icon">＋</div>
+      <h3>Add your custom fields</h3>
+      <p>This {section} section starts clean. Add only the fields your business needs.</p>
+      <button type="button" className="gold-button" onClick={() => onAdd(section)}>＋ Add Custom Field</button>
     </div>
   );
 }
@@ -133,7 +159,7 @@ function ImageActions({ url, label = "Image" }) {
         if (navigator.canShare) {
           const res = await fetch(url);
           const blob = await res.blob();
-          const file = new File([blob], `${label.replace(/\\s+/g, "-").toLowerCase()}.png`, { type: blob.type || "image/png" });
+          const file = new File([blob], `${label.replace(/\s+/g, "-").toLowerCase()}.png`, { type: blob.type || "image/png" });
           if (navigator.canShare({ files: [file] })) { await navigator.share({ title: label, files: [file] }); return; }
         }
         await navigator.share({ title: label, url });
@@ -148,7 +174,7 @@ function ImageActions({ url, label = "Image" }) {
       const res = await fetch(url);
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = objectUrl; a.download = `${label.replace(/\\s+/g, "-").toLowerCase()}.png`; document.body.appendChild(a); a.click(); a.remove();
+      const a = document.createElement("a"); a.href = objectUrl; a.download = `${label.replace(/\s+/g, "-").toLowerCase()}.png`; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
     } catch { window.open(url, "_blank"); }
   }
@@ -195,10 +221,6 @@ function App() {
   const [signatureMessage, setSignatureMessage] = useState("");
   const [signaturePreview, setSignaturePreview] = useState("");
   const signatureInputRef = useRef(null);
-  const [coverUploading, setCoverUploading] = useState(false);
-  const [coverMessage, setCoverMessage] = useState("");
-  const [coverPreview, setCoverPreview] = useState("");
-  const coverInputRef = useRef(null);
 
   const [customers, setCustomers] = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
@@ -428,7 +450,6 @@ function App() {
       setAddress(data.address || "");
       setLogoPreview(data.logo_url || "");
       setSignaturePreview(data.signature_url || "");
-      setCoverPreview(data.cover_url || "");
     }
   }
 
@@ -473,6 +494,50 @@ function App() {
     return new File([blob], "signature-transparent.png", { type: "image/png" });
   }
 
+  async function uploadAttachment(file, section) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setFileMessage("File must be 10MB or smaller.");
+      return;
+    }
+    setFileUploading(true);
+    setFileMessage("");
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const path = `${session.user.id}/${section}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("ss-attachments")
+        .upload(path, file, { upsert: false, contentType: file.type || "application/octet-stream" });
+      if (uploadError) throw uploadError;
+
+      const { data: signed, error: signedError } = await supabase.storage
+        .from("ss-attachments")
+        .createSignedUrl(path, 60 * 60 * 24 * 365);
+      if (signedError) throw signedError;
+
+      const item = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        path,
+        url: signed.signedUrl
+      };
+      if (section === "booking") setBookingForm(prev => ({ ...prev, attachments: [...(prev.attachments || []), item] }));
+      else setInvoiceForm(prev => ({ ...prev, attachments: [...(prev.attachments || []), item] }));
+      setFileMessage("File uploaded and attached.");
+    } catch (e) {
+      setFileMessage(e?.message || "File upload failed.");
+    } finally {
+      setFileUploading(false);
+    }
+  }
+
+  function removeAttachment(section, id) {
+    if (section === "booking") setBookingForm(prev => ({ ...prev, attachments: (prev.attachments || []).filter(x => x.id !== id) }));
+    else setInvoiceForm(prev => ({ ...prev, attachments: (prev.attachments || []).filter(x => x.id !== id) }));
+  }
+
   async function uploadPrivateImage(file, type) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -489,14 +554,12 @@ function App() {
     if (type === "signature") file = await makeTransparentSignature(file);
     const ext = type === "signature" ? "png" : (file.name.split(".").pop()?.toLowerCase() || "png");
     const path = `${session.user.id}/${type}-${Date.now()}.${ext}`;
-    const bucket = type === "logo" ? "ss-logos" : type === "signature" ? "ss-signatures" : "ss-covers";
+    const bucket = type === "logo" ? "ss-logos" : "ss-signatures";
 
     if (type === "logo") {
       setLogoUploading(true); setLogoMessage("");
-    } else if (type === "signature") {
-      setSignatureUploading(true); setSignatureMessage("");
     } else {
-      setCoverUploading(true); setCoverMessage("");
+      setSignatureUploading(true); setSignatureMessage("");
     }
 
     const { error: uploadError } = await supabase.storage
@@ -505,8 +568,7 @@ function App() {
 
     if (uploadError) {
       if (type === "logo") { setLogoMessage(uploadError.message); setLogoUploading(false); }
-      else if (type === "signature") { setSignatureMessage(uploadError.message); setSignatureUploading(false); }
-      else { setCoverMessage(uploadError.message); setCoverUploading(false); }
+      else { setSignatureMessage(uploadError.message); setSignatureUploading(false); }
       return;
     }
 
@@ -516,12 +578,11 @@ function App() {
 
     if (signedError) {
       if (type === "logo") { setLogoMessage(signedError.message); setLogoUploading(false); }
-      else if (type === "signature") { setSignatureMessage(signedError.message); setSignatureUploading(false); }
-      else { setCoverMessage(signedError.message); setCoverUploading(false); }
+      else { setSignatureMessage(signedError.message); setSignatureUploading(false); }
       return;
     }
 
-    const column = type === "logo" ? "logo_url" : type === "signature" ? "signature_url" : "cover_url";
+    const column = type === "logo" ? "logo_url" : "signature_url";
     const { error: dbError } = await supabase.from("ss_business_profiles").upsert({
       user_id: session.user.id,
       business_name: businessName.trim(),
@@ -533,19 +594,15 @@ function App() {
 
     if (dbError) {
       if (type === "logo") setLogoMessage(dbError.message);
-      else if (type === "signature") setSignatureMessage(dbError.message);
-      else setCoverMessage(dbError.message);
+      else setSignatureMessage(dbError.message);
     } else if (type === "logo") {
       setLogoPreview(signed.signedUrl); setLogoMessage("Logo uploaded.");
-    } else if (type === "signature") {
-      setSignaturePreview(signed.signedUrl); setSignatureMessage("Signature uploaded.");
     } else {
-      setCoverPreview(signed.signedUrl); setCoverMessage("Cover photo uploaded.");
+      setSignaturePreview(signed.signedUrl); setSignatureMessage("Signature uploaded.");
     }
 
     if (type === "logo") setLogoUploading(false);
-    else if (type === "signature") setSignatureUploading(false);
-    else setCoverUploading(false);
+    else setSignatureUploading(false);
   }
 
   async function loadCustomers() {
@@ -729,6 +786,7 @@ function App() {
       reminder_time: bookingForm.reminder_enabled ? (bookingForm.reminder_time || null) : null,
       reminder_note: bookingForm.reminder_enabled ? bookingForm.reminder_note.trim() : null,
       custom_data: bookingForm.custom_data || {},
+      attachments: bookingForm.attachments || [],
       notes: bookingForm.notes.trim()
     };
 
@@ -854,6 +912,7 @@ function App() {
       remaining_amount: calcRemaining(total, paid),
       due_date: invoiceForm.due_date || null,
       custom_data: invoiceForm.custom_data || {},
+      attachments: invoiceForm.attachments || [],
       notes: invoiceForm.notes.trim()
     };
 
@@ -1181,7 +1240,7 @@ function App() {
     return (
       <div className="dashboard">
         {notificationMessage && <div className="notification-banner" onClick={() => setNotificationMessage("")}>🔔 {notificationMessage}<span>×</span></div>}
-        <div className="welcome-card" style={coverPreview ? { backgroundImage: `linear-gradient(rgba(0,0,0,.66),rgba(0,0,0,.72)),url(${coverPreview})` } : undefined}>
+        <div className="welcome-card">
           <p>WELCOME BACK</p><h2>{businessName}</h2><span>Manage your complete event business from one place.</span>
         </div>
         <div className="stats-grid">
@@ -1253,7 +1312,7 @@ function App() {
           </form>
         )}
 
-        {customersLoading ? <LoadingText /> : filteredCustomers.length === 0 ? <Empty text="No customers found." /> : (
+        {customersLoading ? <LoadingText /> : filteredCustomers.length === 0 ? (!customerSearch && !(customFields.customers || []).length ? <SectionSetup section="customers" onAdd={addCustomField} /> : <Empty text="No customers found." />) : (
           <div className="list-stack">
             {filteredCustomers.map(c => (
               <div className="list-card clickable" key={c.id} onClick={() => { setSelectedCustomer(c); setCurrentPage("customer-detail"); }}>
@@ -1337,7 +1396,7 @@ function App() {
       <div className="dashboard">
         <PageHeader title="Bookings" action={<div className="header-actions"><button className="secondary-button" onClick={() => setCurrentPage("home")}>← Back</button><button className="gold-button" onClick={() => openNewBooking()}>＋ New Booking</button></div>} />
         <input className="search-input" placeholder="Search bookings..." value={bookingSearch} onChange={e => setBookingSearch(e.target.value)} />
-        {bookingsLoading ? <LoadingText /> : filteredBookings.length === 0 ? <Empty text="No bookings found." /> : (
+        {bookingsLoading ? <LoadingText /> : filteredBookings.length === 0 ? (!bookingSearch && !(customFields.bookings || []).length ? <SectionSetup section="bookings" onAdd={addCustomField} /> : <Empty text="No bookings found." />) : (
           <div className="list-stack">
             {filteredBookings.map(b => (
               <div className="list-card clickable" key={b.id} onClick={() => { setSelectedBooking(b); setCurrentPage("booking-detail"); }}>
@@ -1374,6 +1433,7 @@ function App() {
             {bookingForm.reminder_enabled && <><div className="two-col"><div><label>Reminder Date</label><input type="date" value={bookingForm.reminder_date || ""} onChange={e => updateBookingField("reminder_date", e.target.value)} /></div><div><label>Reminder Time</label><input type="time" value={bookingForm.reminder_time || ""} onChange={e => updateBookingField("reminder_time", e.target.value)} /></div></div><label>Reminder Note</label><input value={bookingForm.reminder_note || ""} onChange={e => updateBookingField("reminder_note", e.target.value)} placeholder="What should we remember?" /></>}
           </div>
           <CustomFields fields={customFields.bookings} data={bookingForm.custom_data || {}} onChange={v => updateBookingField("custom_data", v)} section="bookings" onAdd={addCustomField} />
+          <AttachmentUploader section="booking" attachments={bookingForm.attachments || []} onUpload={uploadAttachment} onRemove={removeAttachment} uploading={fileUploading} message={fileMessage} />
           <label>Notes</label><textarea rows="3" value={bookingForm.notes} onChange={e => updateBookingField("notes", e.target.value)} />
           {bookingMessage && <p className="form-message">{bookingMessage}</p>}
           <button className="gold-button wide" disabled={bookingSaving}>{bookingSaving ? "Saving..." : "Save Booking"}</button>
@@ -1399,7 +1459,7 @@ function App() {
           <Detail label="Total" value={money(selectedBooking.total_amount)} />
           <Detail label="Advance" value={money(selectedBooking.advance_amount)} />
           <Detail label="Remaining" value={money(selectedBooking.remaining_amount)} />
-          <Detail label="Notes" value={selectedBooking.notes} />{(customFields.bookings || []).map(f => <Detail key={f.id} label={f.label} value={selectedBooking.custom_data?.[f.id]} />)}
+          <Detail label="Notes" value={selectedBooking.notes} />{(selectedBooking.attachments || []).length > 0 && <div className="detail-attachments"><strong>Files & Images</strong>{selectedBooking.attachments.map(a => <div className="saved-attachment" key={a.id || a.path}><span>{a.name}</span><ImageActions url={a.url} label={a.name} /></div>)}</div>}{(customFields.bookings || []).map(f => <Detail key={f.id} label={f.label} value={selectedBooking.custom_data?.[f.id]} />)}
           <div className="button-row">
             <button className="gold-button" onClick={() => openEditBooking(selectedBooking)}>Edit</button>
             <button className="secondary-button" onClick={() => openNewInvoice(selectedBooking)}>＋ Invoice</button>
@@ -1415,7 +1475,7 @@ function App() {
       <div className="dashboard">
         <PageHeader title="Invoices" action={<div className="header-actions"><button className="secondary-button" onClick={() => setCurrentPage("home")}>← Back</button><button className="gold-button" onClick={() => openNewInvoice()}>＋ New Invoice</button></div>} />
         <input className="search-input" placeholder="Search invoices..." value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)} />
-        {invoicesLoading ? <LoadingText /> : filteredInvoices.length === 0 ? <Empty text="No invoices found." /> : (
+        {invoicesLoading ? <LoadingText /> : filteredInvoices.length === 0 ? (!invoiceSearch && !(customFields.invoices || []).length ? <SectionSetup section="invoices" onAdd={addCustomField} /> : <Empty text="No invoices found." />) : (
           <div className="list-stack">
             {filteredInvoices.map(i => (
               <div className="list-card clickable" key={i.id} onClick={() => { setSelectedInvoice(i); setCurrentPage("invoice-detail"); }}>
@@ -1449,6 +1509,7 @@ function App() {
           <label>Paid Amount</label><input type="number" min="0" value={invoiceForm.paid_amount} onChange={e => updateInvoiceField("paid_amount", e.target.value)} />
           <label>Remaining Amount</label><input type="number" value={invoiceForm.remaining_amount} readOnly />
           <CustomFields fields={customFields.invoices} data={invoiceForm.custom_data || {}} onChange={v => updateInvoiceField("custom_data", v)} section="invoices" onAdd={addCustomField} />
+          <AttachmentUploader section="invoice" attachments={invoiceForm.attachments || []} onUpload={uploadAttachment} onRemove={removeAttachment} uploading={fileUploading} message={fileMessage} />
           <label>Notes</label><textarea rows="3" value={invoiceForm.notes} onChange={e => updateInvoiceField("notes", e.target.value)} />
           {invoiceMessage && <p className="form-message">{invoiceMessage}</p>}<button className="gold-button wide" disabled={invoiceSaving}>{invoiceSaving ? "Saving..." : "Save Invoice"}</button>
         </form>
@@ -1462,7 +1523,6 @@ function App() {
       <div className="dashboard">
         <PageHeader title="Invoice Details" action={<button className="secondary-button" onClick={() => setCurrentPage("invoices")}>← Back</button>} />
         <div className="invoice-paper">
-          {coverPreview && <div className="invoice-cover" style={{ backgroundImage: `url(${coverPreview})` }} />}
           <div className="invoice-head">
             <div>
               {logoPreview && <img src={logoPreview} className="invoice-logo" alt="Business logo" />}
@@ -1485,7 +1545,7 @@ function App() {
 
           <div className="invoice-items"><h3>Items / Services</h3><p>{selectedInvoice.items || "—"}</p></div>
           <div className="invoice-total"><span>Subtotal</span><b>{money(selectedInvoice.subtotal)}</b><span>Discount</span><b>{money(selectedInvoice.discount)}</b><span>Total</span><b>{money(selectedInvoice.total_amount)}</b><span>Paid</span><b>{money(selectedInvoice.paid_amount)}</b><span>Remaining</span><b>{money(selectedInvoice.remaining_amount)}</b></div>
-          <div className="invoice-custom-fields">{(customFields.invoices || []).map(f => <Detail key={f.id} label={f.label} value={selectedInvoice.custom_data?.[f.id]} />)}</div><p className="invoice-notes"><strong>Notes:</strong> {selectedInvoice.notes || "—"}</p>
+          {(selectedInvoice.attachments || []).length > 0 && <div className="detail-attachments invoice-attachments"><strong>Files & Images</strong>{selectedInvoice.attachments.map(a => <div className="saved-attachment" key={a.id || a.path}><span>{a.name}</span><ImageActions url={a.url} label={a.name} /></div>)}</div>}\n          <div className="invoice-custom-fields">{(customFields.invoices || []).map(f => <Detail key={f.id} label={f.label} value={selectedInvoice.custom_data?.[f.id]} />)}</div><p className="invoice-notes"><strong>Notes:</strong> {selectedInvoice.notes || "—"}</p>
           {signaturePreview && <><img src={signaturePreview} className="signature-preview" alt="Signature" /><div className="no-print"><ImageActions url={signaturePreview} label="Signature" /></div></>}
 
           <div className="button-row no-print">
@@ -1599,18 +1659,37 @@ function App() {
   }
 
   function renderSettings() {
-    const sections = [{ key: "customers", title: "Customer Fields" }, { key: "bookings", title: "Booking Fields" }, { key: "invoices", title: "Invoice Fields" }];
+    const sections = [
+      { key: "customers", title: "Customer Fields" },
+      { key: "bookings", title: "Booking Fields" },
+      { key: "invoices", title: "Invoice Fields" }
+    ];
     return <div className="dashboard">
       <PageHeader title="Settings" action={<button className="secondary-button" onClick={() => setCurrentPage("home")}>← Back</button>} />
       <form className="form-card profile-form" onSubmit={saveBusinessProfile}>
-        <h2>Business Profile</h2><label>Business Name</label><input value={businessName} onChange={e => setBusinessName(e.target.value)} /><label>Phone</label><input value={phone} onChange={e => setPhone(e.target.value)} /><label>WhatsApp</label><input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} /><label>Address</label><textarea rows="3" value={address} onChange={e => setAddress(e.target.value)} />
-        {profileMessage && <p className="form-message">{profileMessage}</p>}<button className="gold-button wide" disabled={profileSaving}>{profileSaving ? "Saving..." : "Save Business Profile"}</button>
+        <h2>Business Profile</h2>
+        <label>Business Name</label><input value={businessName} onChange={e => setBusinessName(e.target.value)} />
+        <label>Phone</label><input value={phone} onChange={e => setPhone(e.target.value)} />
+        <label>WhatsApp</label><input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} />
+        <label>Address</label><textarea rows="3" value={address} onChange={e => setAddress(e.target.value)} />
+        {profileMessage && <p className="form-message">{profileMessage}</p>}
+        <button className="gold-button wide" disabled={profileSaving}>{profileSaving ? "Saving..." : "Save Business Profile"}</button>
       </form>
-      <div className="upload-placeholder cover-upload" style={coverPreview ? { backgroundImage: `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.45)),url(${coverPreview})` } : undefined}><div className="upload-icon">🖼️</div><h3>Invoice Cover Photo</h3><p>This photo works as the invoice header cover, like a premium bill book.</p>{coverPreview && <><img src={coverPreview} className="cover-preview" alt="Cover" /><ImageActions url={coverPreview} label="Invoice Cover" /></>}<input ref={coverInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "cover")} /><button className="gold-button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading}>{coverUploading ? "Uploading..." : "Choose Cover Photo"}</button>{coverMessage && <p className="form-message">{coverMessage}</p>}</div>
-      <div className="upload-placeholder"><div className="upload-icon">🖼️</div><h3>Business Logo</h3><p>Upload your luxury business logo. Maximum 5MB.</p>{logoPreview && <><img src={logoPreview} className="settings-image" alt="Logo preview" /><ImageActions url={logoPreview} label="Business Logo" /></>}<input ref={logoInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "logo")} /><button className="gold-button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>{logoUploading ? "Uploading..." : "Choose Logo"}</button>{logoMessage && <p className="form-message">{logoMessage}</p>}</div>
-      <div className="upload-placeholder"><div className="upload-icon">✍️</div><h3>Digital Signature</h3><p>For best result upload a transparent PNG signature. White paper/background is visually hidden on the invoice.</p>{signaturePreview && <><img src={signaturePreview} className="settings-signature" alt="Signature preview" /><ImageActions url={signaturePreview} label="Signature" /></>}<input ref={signatureInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "signature")} /><button className="gold-button" onClick={() => signatureInputRef.current?.click()} disabled={signatureUploading}>{signatureUploading ? "Uploading..." : "Choose Signature"}</button>{signatureMessage && <p className="form-message">{signatureMessage}</p>}</div>
-      <div className="customization-card"><div className="section-heading"><div><h2>Customize Your App</h2><p>Add only the fields your business needs. You can edit this anytime.</p></div><button className="secondary-button" onClick={() => setCustomizing(v => !v)}>{customizing ? "Close" : "Customize Fields"}</button></div>{customizing && sections.map(s => <div className="custom-section" key={s.key}><div className="custom-section-head"><h3>{s.title}</h3><button className="gold-button" onClick={() => addCustomField(s.key)}>＋ Add Field</button></div>{(customFields[s.key] || []).length === 0 ? <p className="field-hint">No custom fields added.</p> : (customFields[s.key] || []).map(f => <div className="custom-field-row" key={f.id}><span>{f.label}</span><div className="button-row compact"><button className="mini-button" onClick={() => editCustomField(s.key, f)}>Edit</button><button className="mini-danger" onClick={() => removeCustomField(s.key, f.id)}>Delete</button></div></div>)}</div>)}</div>
-      <div className="danger-zone"><h3>Account</h3><p>Manage your session or permanently delete this account and its data.</p><div className="button-row"><button className="secondary-button" onClick={handleLogout}>Logout</button><button className="danger-button" onClick={handleDeleteAccount}>Delete Account</button></div></div>
+
+      <div className="info-card">
+        <strong>Brand images</strong>
+        <p>Logo and signature upload is kept out of the main screen. Existing saved logo/signature will continue to appear where configured.</p>
+      </div>
+
+      <div id="custom-fields-settings" className="customization-card">
+        <div className="section-heading"><div><h2>Edit Custom Fields</h2><p>Add, rename or delete fields for Customers, Bookings and Invoices.</p></div></div>
+        {sections.map(s => <div className="custom-section" key={s.key}>
+          <div className="custom-section-head"><h3>{s.title}</h3><button type="button" className="gold-button" onClick={() => addCustomField(s.key)}>＋ Add Field</button></div>
+          {(customFields[s.key] || []).length === 0 ? <p className="field-hint">No custom fields added yet.</p> : (customFields[s.key] || []).map(f => <div className="custom-field-row" key={f.id}><span>{f.label}</span><div className="button-row compact"><button type="button" className="mini-button" onClick={() => editCustomField(s.key, f)}>Edit</button><button type="button" className="mini-danger" onClick={() => removeCustomField(s.key, f.id)}>Delete</button></div></div>)}
+        </div>)}
+      </div>
+
+      <div className="danger-zone"><h3>Delete Account</h3><p>This permanently deletes your account and the Shareef Sons business data connected to it.</p><button className="danger-button" onClick={handleDeleteAccount}>Delete Account</button></div>
     </div>;
   }
 
@@ -1640,7 +1719,7 @@ function App() {
           <p className="eyebrow">SHAREEF SONS</p>
           <h1>{currentPage === "home" ? "Business Dashboard" : pageTitle(currentPage)}</h1>
         </div>
-        <button className="profile-button" onClick={() => setCurrentPage("settings")}>⚙ Settings</button>
+        <button className="more-toggle" onClick={() => setMoreOpen(v => !v)} aria-label="Open menu">☰</button>
       </header>
 
       {renderPage()}
@@ -1650,16 +1729,19 @@ function App() {
         <button className={currentPage.startsWith("customer") ? "active" : ""} onClick={() => setCurrentPage("customers")}>♙<span>Customers</span></button>
         <button className={currentPage.startsWith("booking") ? "active" : ""} onClick={() => setCurrentPage("bookings")}>▣<span>Bookings</span></button>
         <button className={currentPage.startsWith("invoice") ? "active" : ""} onClick={() => setCurrentPage("invoices")}>▤<span>Invoices</span></button>
-        <button className={["payments", "expenses", "notes", "calendar", "settings"].includes(currentPage) ? "active" : ""} onClick={() => setCurrentPage("settings")}>⚙<span>More</span></button>
+        <button className={["payments", "expenses", "notes", "calendar", "settings"].includes(currentPage) ? "active" : ""} onClick={() => setMoreOpen(true)}>☰<span>More</span></button>
       </nav>
 
-      {currentPage === "settings" && null}
-      <div className="more-shortcuts">
-        <button onClick={() => setCurrentPage("payments")}>Payments</button>
-        <button onClick={() => setCurrentPage("expenses")}>Expenses</button>
-        <button onClick={() => setCurrentPage("notes")}>Notes</button>
-        <button onClick={() => setCurrentPage("calendar")}>Calendar</button><button onClick={() => setCurrentPage("settings")}>Settings</button>
-      </div>
+      {moreOpen && <div className="side-menu-backdrop" onClick={() => setMoreOpen(false)}></div>}
+      <aside className={`side-menu ${moreOpen ? "open" : ""}`}>
+        <div className="side-menu-head"><strong>More</strong><button onClick={() => setMoreOpen(false)}>×</button></div>
+        <button onClick={() => { setCurrentPage("payments"); setMoreOpen(false); }}>Payments</button>
+        <button onClick={() => { setCurrentPage("expenses"); setMoreOpen(false); }}>Expenses</button>
+        <button onClick={() => { setCurrentPage("notes"); setMoreOpen(false); }}>Notes</button>
+        <button onClick={() => { setCurrentPage("calendar"); setMoreOpen(false); }}>Calendar & Reminders</button>
+        <button onClick={() => { setCurrentPage("settings"); setMoreOpen(false); setTimeout(() => document.getElementById("custom-fields-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }}>Edit Custom Fields</button>
+        <button onClick={() => { setCurrentPage("settings"); setMoreOpen(false); }}>⚙ Settings</button>
+      </aside>
     </div>
   );
 }
@@ -1679,8 +1761,9 @@ function ExpenseModal({ data, onClose }) { const rows = data.rows || [data]; ret
 function PageHeader({ title, action }) {
   return (
     <div className="page-heading">
+      <div className="page-heading-back">{action}</div>
       <h2>{title}</h2>
-      {action}
+      <div className="page-heading-space" />
     </div>
   );
 }
