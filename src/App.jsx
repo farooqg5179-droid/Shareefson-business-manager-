@@ -205,7 +205,8 @@ function App() {
   const [customFields, setCustomFields] = useState({ customers: [], bookings: [], invoices: [] });
   const [customizing, setCustomizing] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  
+  const [fileUploading, setFileUploading] = useState(false);
+  const [fileMessage, setFileMessage] = useState("");
   const [businessName, setBusinessName] = useState("Shareef Sons Events Organizer");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
