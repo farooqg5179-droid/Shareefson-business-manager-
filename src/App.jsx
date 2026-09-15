@@ -39,32 +39,120 @@ function calcRemaining(total, paid) {
   return Math.max(Number(total || 0) - Number(paid || 0), 0);
 }
 
-function CustomFields({ fields = [], data = {}, onChange }) {
-  if (!fields.length) return null;
-  return <div className="custom-record-fields">{fields.map(f => <div key={f.id}><label>{f.label}</label><input value={data?.[f.id] || ""} placeholder={f.label} onChange={e => onChange({ ...data, [f.id]: e.target.value })} /></div>)}</div>;
+function CustomFields({ fields = [], data = {}, onChange, section, onAdd }) {
+  return (
+    <div className="custom-record-fields">
+      {!fields.length ? (
+        <div className="custom-empty">
+          <strong>No custom fields</strong>
+          <span>This section is kept simple. Add only the fields your business needs.</span>
+          {onAdd && <button type="button" className="secondary-button" onClick={() => onAdd(section)}>＋ Add Custom Field</button>}
+        </div>
+      ) : fields.map(f => (
+        <div key={f.id}>
+          <label>{f.label}</label>
+          <input value={data?.[f.id] || ""} placeholder={f.label} onChange={e => onChange({ ...data, [f.id]: e.target.value })} />
+        </div>
+      ))}
+      {!!fields.length && onAdd && <button type="button" className="custom-add-inline" onClick={() => onAdd(section)}>＋ Add another custom field</button>}
+    </div>
+  );
+}
+
+function SuggestionPicker({ value, onChange, options = [], placeholder, required = false, emptyText = "No matching suggestions" }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const query = String(value || "").trim().toLowerCase();
+  const matches = options.filter(x => String(x || "").toLowerCase().includes(query)).slice(0, 8);
+
+  useEffect(() => {
+    const close = e => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("touchstart", close); };
+  }, []);
+
+  return (
+    <div className="picker-wrap" ref={rootRef}>
+      <input
+        value={value || ""}
+        required={required}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+      />
+      {open && query && (
+        <div className="suggestion-menu">
+          {matches.length ? matches.map(item => (
+            <button type="button" className="suggestion-item" key={item} onClick={() => { onChange(item); setOpen(false); }}>
+              <span>{item}</span><small>Select</small>
+            </button>
+          )) : <div className="suggestion-empty">{emptyText}</div>}
+        </div>
+      )}
+      <small className="field-hint">Type any name, or type the first letters to choose a saved suggestion.</small>
+    </div>
+  );
 }
 
 function CustomerPicker({ value, customerId, customers, onChange, required = false }) {
-  const listId = "customer-suggestions";
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const query = String(value || "").trim().toLowerCase();
+  const matches = customers.filter(c => String(c.name || "").toLowerCase().includes(query)).slice(0, 8);
+  useEffect(() => {
+    const close = e => { if (!rootRef.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("touchstart", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("touchstart", close); };
+  }, []);
   return (
-    <div className="picker-wrap">
-      <input
-        list={listId}
-        value={value || ""}
-        required={required}
-        placeholder="Type customer name or select saved customer"
-        onChange={e => {
-          const text = e.target.value;
-          const match = customers.find(c => (c.name || "").toLowerCase() === text.trim().toLowerCase());
-          onChange(text, match?.id || "");
-        }}
-      />
-      <datalist id={listId}>
-        {customers.map(c => <option key={c.id} value={c.name}>{c.phone || c.whatsapp || "Saved customer"}</option>)}
-      </datalist>
-      <small className="field-hint">Type any new name, or start typing to see saved customer suggestions.</small>
+    <div className="picker-wrap" ref={rootRef}>
+      <input value={value || ""} required={required} placeholder="Type customer name or select saved customer" autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onChange={e => { onChange(e.target.value, ""); setOpen(true); }} />
+      {open && query && (
+        <div className="suggestion-menu">
+          {matches.length ? matches.map(c => (
+            <button type="button" className="suggestion-item" key={c.id} onClick={() => { onChange(c.name, c.id); setOpen(false); }}>
+              <span><b>{c.name}</b><small>{c.phone || c.whatsapp || "Saved customer"}</small></span><small>Select</small>
+            </button>
+          )) : <div className="suggestion-empty">No saved customer matches. You can keep typing a new name.</div>}
+        </div>
+      )}
+      <small className="field-hint">Manual name is allowed. Start typing A, B, C etc. to see saved customers.</small>
     </div>
   );
+}
+
+function ImageActions({ url, label = "Image" }) {
+  if (!url) return null;
+  async function shareImage() {
+    try {
+      if (navigator.share) {
+        if (navigator.canShare) {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const file = new File([blob], `${label.replace(/\\s+/g, "-").toLowerCase()}.png`, { type: blob.type || "image/png" });
+          if (navigator.canShare({ files: [file] })) { await navigator.share({ title: label, files: [file] }); return; }
+        }
+        await navigator.share({ title: label, url });
+      } else {
+        await navigator.clipboard?.writeText(url);
+        alert("Share is not supported here. Image link copied if your browser allows it.");
+      }
+    } catch (e) { if (e?.name !== "AbortError") alert(e?.message || "Could not share image."); }
+  }
+  async function downloadImage() {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = objectUrl; a.download = `${label.replace(/\\s+/g, "-").toLowerCase()}.png`; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch { window.open(url, "_blank"); }
+  }
+  return <div className="image-actions"><button type="button" className="mini-button" onClick={shareImage}>↗ Share</button><button type="button" className="mini-button" onClick={downloadImage}>↓ Save to Gallery</button></div>;
 }
 
 function App() {
@@ -239,6 +327,12 @@ function App() {
     saveCustomFields({ ...customFields, [section]: (customFields[section] || []).filter(f => f.id !== id) });
   }
 
+  function editCustomField(section, field) {
+    const label = window.prompt("Edit field name", field.label);
+    if (!label?.trim()) return;
+    saveCustomFields({ ...customFields, [section]: (customFields[section] || []).map(f => f.id === field.id ? { ...f, label: label.trim() } : f) });
+  }
+
   function requestReminderPermission() {
     if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission();
   }
@@ -302,6 +396,19 @@ function App() {
     }
   }
 
+  async function handleDeleteAccount() {
+    const ok = window.confirm("Delete your account and business data permanently? This cannot be undone.");
+    if (!ok) return;
+    try {
+      const { error } = await supabase.functions.invoke("delete-my-account");
+      if (error) throw error;
+      await supabase.auth.signOut();
+      alert("Account deleted successfully.");
+    } catch (e) {
+      alert(e?.message || "Account deletion failed. Please check the Supabase delete-my-account function.");
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setCurrentPage("home");
@@ -342,6 +449,30 @@ function App() {
     setProfileMessage(error ? error.message : "Business profile saved.");
   }
 
+  async function makeTransparentSignature(file) {
+    if (!file || !file.type.startsWith("image/")) return file;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = image.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r=d[i], g=d[i+1], b=d[i+2];
+      const brightness=(r+g+b)/3;
+      const spread=Math.max(r,g,b)-Math.min(r,g,b);
+      if (brightness > 225 && spread < 35) d[i+3]=0;
+      else if (brightness > 190 && spread < 45) d[i+3]=Math.max(0, Math.round((225-brightness)*3));
+    }
+    ctx.putImageData(image,0,0);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    return new File([blob], "signature-transparent.png", { type: "image/png" });
+  }
+
   async function uploadPrivateImage(file, type) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -355,7 +486,8 @@ function App() {
       return;
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    if (type === "signature") file = await makeTransparentSignature(file);
+    const ext = type === "signature" ? "png" : (file.name.split(".").pop()?.toLowerCase() || "png");
     const path = `${session.user.id}/${type}-${Date.now()}.${ext}`;
     const bucket = type === "logo" ? "ss-logos" : type === "signature" ? "ss-signatures" : "ss-covers";
 
@@ -1112,7 +1244,7 @@ function App() {
             <textarea rows="2" value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
             <label>Notes</label>
             <textarea rows="3" value={customerNotes} onChange={e => setCustomerNotes(e.target.value)} />
-            <CustomFields fields={customFields.customers} data={customerCustomData} onChange={setCustomerCustomData} />
+            <CustomFields fields={customFields.customers} data={customerCustomData} onChange={setCustomerCustomData} section="customers" onAdd={addCustomField} />
             {customerMessage && <p className="form-message">{customerMessage}</p>}
             <div className="button-row">
               <button className="gold-button" disabled={customerSaving}>{customerSaving ? "Saving..." : "Save Customer"}</button>
@@ -1143,6 +1275,7 @@ function App() {
               <label>WhatsApp</label><input value={editWhatsapp} onChange={e => setEditWhatsapp(e.target.value)} />
               <label>Address</label><textarea rows="2" value={editAddress} onChange={e => setEditAddress(e.target.value)} />
               <label>Notes</label><textarea rows="3" value={editNotes} onChange={e => setEditNotes(e.target.value)} />
+              <CustomFields fields={customFields.customers} data={editCustomData} onChange={setEditCustomData} section="customers" onAdd={addCustomField} />
               {editMessage && <p className="form-message">{editMessage}</p>}
               <div className="button-row">
                 <button className="gold-button" disabled={editSaving}>{editSaving ? "Saving..." : "Update Customer"}</button>
@@ -1168,7 +1301,7 @@ function App() {
           <Detail label="Phone" value={selectedCustomer.phone} />
           <Detail label="WhatsApp" value={selectedCustomer.whatsapp} />
           <Detail label="Address" value={selectedCustomer.address} />
-          <Detail label="Notes" value={selectedCustomer.notes} />
+          <Detail label="Notes" value={selectedCustomer.notes} />{(customFields.customers || []).map(f => <Detail key={f.id} label={f.label} value={selectedCustomer.custom_data?.[f.id]} />)}
           <div className="button-row">
             <button className="gold-button" onClick={() => openEditCustomer(selectedCustomer)}>Edit</button>
             <button className="danger-button" onClick={() => deleteCustomer(selectedCustomer)}>Delete Customer</button>
@@ -1229,8 +1362,7 @@ function App() {
           <label>Customer *</label>
           <CustomerPicker value={bookingForm.customer_name} customerId={bookingForm.customer_id} customers={customers} required onChange={(name, id) => setBookingForm(p => ({ ...p, customer_name: name, customer_id: id }))} />
           <label>Event Type</label>
-          <input list="event-type-suggestions" value={bookingForm.event_type} onChange={e => updateBookingField("event_type", e.target.value)} placeholder="Type event or select suggestion" />
-          <datalist id="event-type-suggestions">{EVENT_TYPES.map(x => <option key={x} value={x} />)}</datalist>
+          <SuggestionPicker value={bookingForm.event_type} options={EVENT_TYPES} placeholder="Type event or choose suggestion" onChange={v => updateBookingField("event_type", v)} />
           <div className="two-col"><div><label>Event Date</label><input type="date" value={bookingForm.event_date || ""} onChange={e => updateBookingField("event_date", e.target.value)} /></div><div><label>Event Time</label><input type="time" value={bookingForm.event_time || ""} onChange={e => updateBookingField("event_time", e.target.value)} /></div></div>
           <label>Venue</label><input value={bookingForm.venue} onChange={e => updateBookingField("venue", e.target.value)} />
           <div className="two-col"><div><label>Guests</label><input type="number" min="0" value={bookingForm.guests} onChange={e => updateBookingField("guests", e.target.value)} /></div><div><label>Package</label><input value={bookingForm.package_name} onChange={e => updateBookingField("package_name", e.target.value)} /></div></div>
@@ -1241,7 +1373,7 @@ function App() {
           <div className="reminder-box booking-reminder"><div className="reminder-title"><div><h3>🔔 Booking Reminder</h3><p>Reminder stays active until the event is completed or its date has passed.</p></div><label className="switch"><input type="checkbox" checked={Boolean(bookingForm.reminder_enabled)} onChange={e => { updateBookingField("reminder_enabled", e.target.checked); if (e.target.checked) requestReminderPermission(); }} /><span></span></label></div>
             {bookingForm.reminder_enabled && <><div className="two-col"><div><label>Reminder Date</label><input type="date" value={bookingForm.reminder_date || ""} onChange={e => updateBookingField("reminder_date", e.target.value)} /></div><div><label>Reminder Time</label><input type="time" value={bookingForm.reminder_time || ""} onChange={e => updateBookingField("reminder_time", e.target.value)} /></div></div><label>Reminder Note</label><input value={bookingForm.reminder_note || ""} onChange={e => updateBookingField("reminder_note", e.target.value)} placeholder="What should we remember?" /></>}
           </div>
-          <CustomFields fields={customFields.bookings} data={bookingForm.custom_data || {}} onChange={v => updateBookingField("custom_data", v)} />
+          <CustomFields fields={customFields.bookings} data={bookingForm.custom_data || {}} onChange={v => updateBookingField("custom_data", v)} section="bookings" onAdd={addCustomField} />
           <label>Notes</label><textarea rows="3" value={bookingForm.notes} onChange={e => updateBookingField("notes", e.target.value)} />
           {bookingMessage && <p className="form-message">{bookingMessage}</p>}
           <button className="gold-button wide" disabled={bookingSaving}>{bookingSaving ? "Saving..." : "Save Booking"}</button>
@@ -1267,7 +1399,7 @@ function App() {
           <Detail label="Total" value={money(selectedBooking.total_amount)} />
           <Detail label="Advance" value={money(selectedBooking.advance_amount)} />
           <Detail label="Remaining" value={money(selectedBooking.remaining_amount)} />
-          <Detail label="Notes" value={selectedBooking.notes} />
+          <Detail label="Notes" value={selectedBooking.notes} />{(customFields.bookings || []).map(f => <Detail key={f.id} label={f.label} value={selectedBooking.custom_data?.[f.id]} />)}
           <div className="button-row">
             <button className="gold-button" onClick={() => openEditBooking(selectedBooking)}>Edit</button>
             <button className="secondary-button" onClick={() => openNewInvoice(selectedBooking)}>＋ Invoice</button>
@@ -1308,7 +1440,7 @@ function App() {
           <label>Invoice Number</label><input value={invoiceForm.invoice_number} onChange={e => updateInvoiceField("invoice_number", e.target.value)} />
           <label>Customer *</label><CustomerPicker value={invoiceForm.customer_name} customerId={invoiceForm.customer_id} customers={customers} required onChange={(name, id) => setInvoiceForm(p => ({ ...p, customer_name: name, customer_id: id }))} />
           <label>Booking</label><select value={invoiceForm.booking_id} onChange={e => { const b = bookings.find(x => x.id === e.target.value); if (b) setInvoiceForm(prev => ({ ...prev, booking_id: b.id, customer_id: b.customer_id || prev.customer_id, customer_name: b.customer_name || b.ss_customers?.name || prev.customer_name, event_type: b.event_type || prev.event_type, event_date: b.event_date || "", event_time: b.event_time || "", venue: b.venue || "", subtotal: Number(b.total_amount || 0), paid_amount: Number(b.advance_amount || 0), total_amount: Number(b.total_amount || 0), remaining_amount: calcRemaining(b.total_amount, b.advance_amount) })); else updateInvoiceField("booking_id", ""); }}><option value="">No booking / manual invoice</option>{bookings.map(b => <option key={b.id} value={b.id}>{b.event_date || "No date"} — {b.event_type} — {b.customer_name || b.ss_customers?.name || "Customer"}</option>)}</select>
-          <label>Event Type</label><input list="invoice-event-types" value={invoiceForm.event_type} onChange={e => updateInvoiceField("event_type", e.target.value)} /><datalist id="invoice-event-types">{EVENT_TYPES.map(x => <option key={x} value={x}/>)}</datalist>
+          <label>Event Type</label><SuggestionPicker value={invoiceForm.event_type} options={EVENT_TYPES} placeholder="Type event or choose suggestion" onChange={v => updateInvoiceField("event_type", v)} />
           <div className="two-col"><div><label>Invoice Date</label><input type="date" value={invoiceForm.invoice_date || ""} onChange={e => updateInvoiceField("invoice_date", e.target.value)} /></div><div><label>Event Date</label><input type="date" value={invoiceForm.event_date || ""} onChange={e => updateInvoiceField("event_date", e.target.value)} /></div></div>
           <div className="two-col"><div><label>Event Time</label><input type="time" value={invoiceForm.event_time || ""} onChange={e => updateInvoiceField("event_time", e.target.value)} /></div><div><label>Due Date</label><input type="date" value={invoiceForm.due_date || ""} onChange={e => updateInvoiceField("due_date", e.target.value)} /></div></div>
           <label>Venue</label><input value={invoiceForm.venue} onChange={e => updateInvoiceField("venue", e.target.value)} />
@@ -1316,7 +1448,7 @@ function App() {
           <div className="three-col"><div><label>Subtotal</label><input type="number" min="0" value={invoiceForm.subtotal} onChange={e => updateInvoiceField("subtotal", e.target.value)} /></div><div><label>Discount</label><input type="number" min="0" value={invoiceForm.discount} onChange={e => updateInvoiceField("discount", e.target.value)} /></div><div><label>Total</label><input type="number" value={invoiceForm.total_amount} readOnly /></div></div>
           <label>Paid Amount</label><input type="number" min="0" value={invoiceForm.paid_amount} onChange={e => updateInvoiceField("paid_amount", e.target.value)} />
           <label>Remaining Amount</label><input type="number" value={invoiceForm.remaining_amount} readOnly />
-          <CustomFields fields={customFields.invoices} data={invoiceForm.custom_data || {}} onChange={v => updateInvoiceField("custom_data", v)} />
+          <CustomFields fields={customFields.invoices} data={invoiceForm.custom_data || {}} onChange={v => updateInvoiceField("custom_data", v)} section="invoices" onAdd={addCustomField} />
           <label>Notes</label><textarea rows="3" value={invoiceForm.notes} onChange={e => updateInvoiceField("notes", e.target.value)} />
           {invoiceMessage && <p className="form-message">{invoiceMessage}</p>}<button className="gold-button wide" disabled={invoiceSaving}>{invoiceSaving ? "Saving..." : "Save Invoice"}</button>
         </form>
@@ -1330,6 +1462,7 @@ function App() {
       <div className="dashboard">
         <PageHeader title="Invoice Details" action={<button className="secondary-button" onClick={() => setCurrentPage("invoices")}>← Back</button>} />
         <div className="invoice-paper">
+          {coverPreview && <div className="invoice-cover" style={{ backgroundImage: `url(${coverPreview})` }} />}
           <div className="invoice-head">
             <div>
               {logoPreview && <img src={logoPreview} className="invoice-logo" alt="Business logo" />}
@@ -1352,8 +1485,8 @@ function App() {
 
           <div className="invoice-items"><h3>Items / Services</h3><p>{selectedInvoice.items || "—"}</p></div>
           <div className="invoice-total"><span>Subtotal</span><b>{money(selectedInvoice.subtotal)}</b><span>Discount</span><b>{money(selectedInvoice.discount)}</b><span>Total</span><b>{money(selectedInvoice.total_amount)}</b><span>Paid</span><b>{money(selectedInvoice.paid_amount)}</b><span>Remaining</span><b>{money(selectedInvoice.remaining_amount)}</b></div>
-          <p className="invoice-notes"><strong>Notes:</strong> {selectedInvoice.notes || "—"}</p>
-          {signaturePreview && <img src={signaturePreview} className="signature-preview" alt="Signature" />}
+          <div className="invoice-custom-fields">{(customFields.invoices || []).map(f => <Detail key={f.id} label={f.label} value={selectedInvoice.custom_data?.[f.id]} />)}</div><p className="invoice-notes"><strong>Notes:</strong> {selectedInvoice.notes || "—"}</p>
+          {signaturePreview && <><img src={signaturePreview} className="signature-preview" alt="Signature" /><div className="no-print"><ImageActions url={signaturePreview} label="Signature" /></div></>}
 
           <div className="button-row no-print">
             <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit</button>
@@ -1442,7 +1575,7 @@ function App() {
 
         <div className="section">
           {notesLoading ? <LoadingText /> : notes.length === 0 ? <Empty text="No notes yet." /> : notes.map(n => (
-            <div className="list-card" key={n.id}>
+            <div className="list-card clickable" key={n.id} onClick={() => setSelectedNote(n)}>
               <div><strong>{n.title || "Untitled"}</strong><span>{n.note} • {n.priority} • {n.status}</span></div>
               <div className="button-row compact"><button className="mini-button" onClick={() => editNote(n)}>Edit</button><button className="mini-danger" onClick={() => deleteNote(n)}>Delete</button></div>
             </div>
@@ -1473,11 +1606,11 @@ function App() {
         <h2>Business Profile</h2><label>Business Name</label><input value={businessName} onChange={e => setBusinessName(e.target.value)} /><label>Phone</label><input value={phone} onChange={e => setPhone(e.target.value)} /><label>WhatsApp</label><input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} /><label>Address</label><textarea rows="3" value={address} onChange={e => setAddress(e.target.value)} />
         {profileMessage && <p className="form-message">{profileMessage}</p>}<button className="gold-button wide" disabled={profileSaving}>{profileSaving ? "Saving..." : "Save Business Profile"}</button>
       </form>
-      <div className="upload-placeholder cover-upload" style={coverPreview ? { backgroundImage: `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.45)),url(${coverPreview})` } : undefined}><div className="upload-icon">🖼️</div><h3>Invoice Cover Photo</h3><p>This photo works as the invoice header cover, like a premium bill book.</p>{coverPreview && <img src={coverPreview} className="cover-preview" alt="Cover" />}<input ref={coverInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "cover")} /><button className="gold-button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading}>{coverUploading ? "Uploading..." : "Choose Cover Photo"}</button>{coverMessage && <p className="form-message">{coverMessage}</p>}</div>
-      <div className="upload-placeholder"><div className="upload-icon">🖼️</div><h3>Business Logo</h3><p>Upload your luxury business logo. Maximum 5MB.</p>{logoPreview && <img src={logoPreview} className="settings-image" alt="Logo preview" />}<input ref={logoInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "logo")} /><button className="gold-button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>{logoUploading ? "Uploading..." : "Choose Logo"}</button>{logoMessage && <p className="form-message">{logoMessage}</p>}</div>
-      <div className="upload-placeholder"><div className="upload-icon">✍️</div><h3>Digital Signature</h3><p>For best result upload a transparent PNG signature. White paper/background is visually hidden on the invoice.</p>{signaturePreview && <img src={signaturePreview} className="settings-signature" alt="Signature preview" />}<input ref={signatureInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "signature")} /><button className="gold-button" onClick={() => signatureInputRef.current?.click()} disabled={signatureUploading}>{signatureUploading ? "Uploading..." : "Choose Signature"}</button>{signatureMessage && <p className="form-message">{signatureMessage}</p>}</div>
-      <div className="customization-card"><div className="section-heading"><div><h2>Customize Your App</h2><p>Add only the fields your business needs. You can edit this anytime.</p></div><button className="secondary-button" onClick={() => setCustomizing(v => !v)}>{customizing ? "Close" : "Customize Fields"}</button></div>{customizing && sections.map(s => <div className="custom-section" key={s.key}><div className="custom-section-head"><h3>{s.title}</h3><button className="gold-button" onClick={() => addCustomField(s.key)}>＋ Add Field</button></div>{(customFields[s.key] || []).length === 0 ? <p className="field-hint">No custom fields added.</p> : (customFields[s.key] || []).map(f => <div className="custom-field-row" key={f.id}><span>{f.label}</span><button className="mini-danger" onClick={() => removeCustomField(s.key, f.id)}>Remove</button></div>)}</div>)}</div>
-      <div className="section"><button className="logout-button" onClick={handleLogout}>Logout</button></div>
+      <div className="upload-placeholder cover-upload" style={coverPreview ? { backgroundImage: `linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.45)),url(${coverPreview})` } : undefined}><div className="upload-icon">🖼️</div><h3>Invoice Cover Photo</h3><p>This photo works as the invoice header cover, like a premium bill book.</p>{coverPreview && <><img src={coverPreview} className="cover-preview" alt="Cover" /><ImageActions url={coverPreview} label="Invoice Cover" /></>}<input ref={coverInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "cover")} /><button className="gold-button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading}>{coverUploading ? "Uploading..." : "Choose Cover Photo"}</button>{coverMessage && <p className="form-message">{coverMessage}</p>}</div>
+      <div className="upload-placeholder"><div className="upload-icon">🖼️</div><h3>Business Logo</h3><p>Upload your luxury business logo. Maximum 5MB.</p>{logoPreview && <><img src={logoPreview} className="settings-image" alt="Logo preview" /><ImageActions url={logoPreview} label="Business Logo" /></>}<input ref={logoInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "logo")} /><button className="gold-button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>{logoUploading ? "Uploading..." : "Choose Logo"}</button>{logoMessage && <p className="form-message">{logoMessage}</p>}</div>
+      <div className="upload-placeholder"><div className="upload-icon">✍️</div><h3>Digital Signature</h3><p>For best result upload a transparent PNG signature. White paper/background is visually hidden on the invoice.</p>{signaturePreview && <><img src={signaturePreview} className="settings-signature" alt="Signature preview" /><ImageActions url={signaturePreview} label="Signature" /></>}<input ref={signatureInputRef} type="file" accept="image/*" hidden onChange={e => uploadPrivateImage(e.target.files?.[0], "signature")} /><button className="gold-button" onClick={() => signatureInputRef.current?.click()} disabled={signatureUploading}>{signatureUploading ? "Uploading..." : "Choose Signature"}</button>{signatureMessage && <p className="form-message">{signatureMessage}</p>}</div>
+      <div className="customization-card"><div className="section-heading"><div><h2>Customize Your App</h2><p>Add only the fields your business needs. You can edit this anytime.</p></div><button className="secondary-button" onClick={() => setCustomizing(v => !v)}>{customizing ? "Close" : "Customize Fields"}</button></div>{customizing && sections.map(s => <div className="custom-section" key={s.key}><div className="custom-section-head"><h3>{s.title}</h3><button className="gold-button" onClick={() => addCustomField(s.key)}>＋ Add Field</button></div>{(customFields[s.key] || []).length === 0 ? <p className="field-hint">No custom fields added.</p> : (customFields[s.key] || []).map(f => <div className="custom-field-row" key={f.id}><span>{f.label}</span><div className="button-row compact"><button className="mini-button" onClick={() => editCustomField(s.key, f)}>Edit</button><button className="mini-danger" onClick={() => removeCustomField(s.key, f.id)}>Delete</button></div></div>)}</div>)}</div>
+      <div className="danger-zone"><h3>Account</h3><p>Manage your session or permanently delete this account and its data.</p><div className="button-row"><button className="secondary-button" onClick={handleLogout}>Logout</button><button className="danger-button" onClick={handleDeleteAccount}>Delete Account</button></div></div>
     </div>;
   }
 
