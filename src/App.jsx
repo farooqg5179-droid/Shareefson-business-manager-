@@ -204,7 +204,8 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState(today().slice(0, 7));
   const [customFields, setCustomFields] = useState({ customers: [], bookings: [], invoices: [] });
   const [customizing, setCustomizing] = useState(false);
-
+  const [moreOpen, setMoreOpen] = useState(false);
+  
   const [businessName, setBusinessName] = useState("Shareef Sons Events Organizer");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
