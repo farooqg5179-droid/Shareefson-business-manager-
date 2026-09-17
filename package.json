@@ -19,7 +19,7 @@
     "lucide-react": "^0.468.0",
     "@capacitor/core": "^7.4.0",
     "@capacitor/android": "^7.4.0",
-    "@capacitor/local-notifications": "^7.0.7",
+    "@capacitor/local-notifications": "^7.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1"
   },
