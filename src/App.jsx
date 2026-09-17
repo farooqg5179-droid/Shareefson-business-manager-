@@ -3,6 +3,45 @@ import { supabase } from "./lib/supabase";
 import "./App.css";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+
+function hashToNotificationId(value) {
+  const str = String(value || "");
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 2147483000;
+}
+
+async function scheduleBookingReminder(booking) {
+  if (!Capacitor.isNativePlatform() || !booking?.id) return;
+  const notifId = hashToNotificationId(booking.id);
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
+  } catch (e) {}
+  if (!booking.reminder_enabled || !booking.reminder_date) return;
+  const when = new Date(`${booking.reminder_date}T${booking.reminder_time || "09:00"}:00`);
+  if (isNaN(when.getTime()) || when.getTime() <= Date.now()) return;
+  try {
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: notifId,
+        title: "Shareef Sons Reminder",
+        body: `${booking.event_type || "Event"} for ${booking.customer_name || "Customer"}${booking.reminder_note ? " — " + booking.reminder_note : ""}`,
+        schedule: { at: when },
+      }],
+    });
+  } catch (e) { console.error("Reminder schedule error", e); }
+}
+
+async function cancelBookingReminder(bookingId) {
+  if (!Capacitor.isNativePlatform() || !bookingId) return;
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: hashToNotificationId(bookingId) }] });
+  } catch (e) {}
+}
 
 const EVENT_TYPES = [
   "Mehndi", "Wedding", "Walima", "Birthday", "Dholki",
@@ -307,7 +346,16 @@ function App() {
 
   function requestReminderPermission() {
     if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission();
+    if (Capacitor.isNativePlatform()) {
+      LocalNotifications.requestPermissions().catch(() => {});
+    }
   }
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      LocalNotifications.requestPermissions().catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -740,10 +788,10 @@ function App() {
     };
 
     const query = bookingEditing
-      ? supabase.from("ss_bookings").update(payload).eq("id", bookingEditing.id).eq("user_id", session.user.id)
-      : supabase.from("ss_bookings").insert(payload);
+      ? supabase.from("ss_bookings").update(payload).eq("id", bookingEditing.id).eq("user_id", session.user.id).select().single()
+      : supabase.from("ss_bookings").insert(payload).select().single();
 
-    const { error } = await query;
+    const { data: savedBooking, error } = await query;
 
     setBookingSaving(false);
 
@@ -751,6 +799,8 @@ function App() {
       setBookingMessage(error.message);
       return;
     }
+
+    if (savedBooking) scheduleBookingReminder(savedBooking);
 
     await loadBookings();
     setCurrentPage("bookings");
@@ -769,6 +819,7 @@ function App() {
       alert(error.message);
       return;
     }
+    await cancelBookingReminder(booking.id);
     await loadBookings();
     setSelectedBooking(null);
     setCurrentPage("bookings");
@@ -1148,6 +1199,19 @@ function App() {
   const monthlyPaymentOut = monthPayments.filter(p => p.payment_type === "out").reduce((s, p) => s + Number(p.amount || 0), 0);
   const monthlyExpenses = monthExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
   const monthlyNet = monthlyIncome - monthlyPaymentOut - monthlyExpenses;
+
+  const globalResults = useMemo(() => {
+    const q = globalSearch.trim().toLowerCase();
+    if (!q) return [];
+    const out = [];
+    customers.filter(c => [c.name,c.phone,c.whatsapp_number,c.address].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(c => out.push({type:"Customer",title:c.name,sub:c.phone||c.whatsapp_number||"",page:"customer-detail",data:c}));
+    bookings.filter(b => [b.customer_name,b.event_type,b.venue,b.event_date].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(b => out.push({type:"Booking",title:b.event_type||"Booking",sub:b.customer_name||b.ss_customers?.name||b.event_date||"",page:"booking-detail",data:b}));
+    invoices.filter(i => [i.invoice_number,i.customer_name,i.event_type,i.venue].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(i => out.push({type:"Invoice",title:i.invoice_number||"Invoice",sub:i.customer_name||i.ss_customers?.name||"",page:"invoice-detail",data:i}));
+    payments.filter(p => [p.title,p.customer_name,p.payment_type,p.payment_method,p.notes].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(p => out.push({type:"Payment",title:p.title||"Payment",sub:`${p.payment_type === "in" ? "Payment In" : "Payment Out"} • ${money(p.amount)}`,page:"payments",data:p}));
+    expenses.filter(e => [e.title,e.category,e.notes].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(e => out.push({type:"Expense",title:e.title||"Expense",sub:money(e.amount),page:"expenses",data:e}));
+    notes.filter(n => [n.title,n.note,n.priority,n.status].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(n => out.push({type:"Note",title:n.title||"Note",sub:n.note||"",page:"notes",data:n}));
+    return out.slice(0,12);
+  }, [globalSearch, customers, bookings, invoices, payments, expenses, notes]);
 
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
@@ -1665,19 +1729,6 @@ function App() {
       <div className="danger-zone"><h3>Delete Account</h3><p>This permanently deletes your account and the Shareef Sons business data connected to it.</p><button className="danger-button" onClick={handleDeleteAccount}>Delete Account</button></div>
     </div>;
   }
-
-  const globalResults = useMemo(() => {
-    const q = globalSearch.trim().toLowerCase();
-    if (!q) return [];
-    const out = [];
-    customers.filter(c => [c.name,c.phone,c.whatsapp_number,c.address].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(c => out.push({type:"Customer",title:c.name,sub:c.phone||c.whatsapp_number||"",page:"customer-detail",data:c}));
-    bookings.filter(b => [b.customer_name,b.event_type,b.venue,b.event_date].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(b => out.push({type:"Booking",title:b.event_type||"Booking",sub:b.customer_name||b.ss_customers?.name||b.event_date||"",page:"booking-detail",data:b}));
-    invoices.filter(i => [i.invoice_number,i.customer_name,i.event_type,i.venue].some(v => String(v||"").toLowerCase().includes(q))).slice(0,4).forEach(i => out.push({type:"Invoice",title:i.invoice_number||"Invoice",sub:i.customer_name||i.ss_customers?.name||"",page:"invoice-detail",data:i}));
-    payments.filter(p => [p.title,p.customer_name,p.payment_type,p.payment_method,p.notes].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(p => out.push({type:"Payment",title:p.title||"Payment",sub:`${p.payment_type === "in" ? "Payment In" : "Payment Out"} • ${money(p.amount)}`,page:"payments",data:p}));
-    expenses.filter(e => [e.title,e.category,e.notes].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(e => out.push({type:"Expense",title:e.title||"Expense",sub:money(e.amount),page:"expenses",data:e}));
-    notes.filter(n => [n.title,n.note,n.priority,n.status].some(v => String(v||"").toLowerCase().includes(q))).slice(0,3).forEach(n => out.push({type:"Note",title:n.title||"Note",sub:n.note||"",page:"notes",data:n}));
-    return out.slice(0,12);
-  }, [globalSearch, customers, bookings, invoices, payments, expenses, notes]);
 
   function renderPage() {
     switch (currentPage) {
