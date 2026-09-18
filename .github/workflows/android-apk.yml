@@ -32,15 +32,19 @@ jobs:
         run: npx cap add android
 
       - name: Configure Android notification permission
-        run: | python3 - <<'PY' from pathlib import Path 
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
+
           permission = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
 
           if permission not in text:
               text = text.replace(
                   '<application',
-                  permission + '\n\n <application',
+                  permission + '\n\n    <application',
                   1
               )
 
@@ -49,7 +53,13 @@ jobs:
           PY
 
       - name: Generate Android App Icon
-        run: | npx @capacitor/assets generate \ --android \ --assetPath assets \ --iconBackgroundColor "#ffffff" \ --iconBackgroundColorDark "#ffffff" 
+        run: |
+          npx @capacitor/assets generate \
+            --android \
+            --assetPath assets \
+            --iconBackgroundColor "#ffffff" \
+            --iconBackgroundColorDark "#ffffff"
+
       - name: Sync Capacitor
         run: npx cap sync android
 
