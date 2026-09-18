@@ -61,3 +61,55 @@
   .invoice-paper{width:190mm!important;min-height:277mm!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
   .invoice-head{padding:12mm 8mm 6mm}.invoice-grid{padding:4mm 8mm}.invoice-items{padding:5mm 8mm}.invoice-total{padding:5mm 8mm}.invoice-notes{padding:0 8mm}.invoice-footer{padding:5mm 8mm;background:#fffaf0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-signature-area{padding:5mm 8mm 2mm}.invoice-actions,.topbar,.bottom-nav,.side-menu,.side-menu-backdrop,.no-print,.page-heading{display:none!important}.dashboard{padding:0!important}.app{padding:0!important}.invoice-logo{width:60px;height:60px}
 }
+
+
+/* Shareef Sons invoice v2: clean A4 document + separate app actions */
+.invoice-paper{
+  width:100%;
+  max-width:794px;
+  margin:0 auto;
+  padding:0;
+  overflow:hidden;
+  background:#fff;
+  border:1px solid #d9d9d9;
+  border-radius:16px;
+  box-shadow:var(--shadow);
+}
+.invoice-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:16px 0 0;
+}
+.invoice-actions button{flex:0 0 auto}
+.invoice-signature-area{display:flex;justify-content:flex-end;padding:16px 26px 20px}
+.invoice-signature-area>div{min-width:210px;text-align:center}
+.invoice-signature-area span{display:block;font-size:11px;color:#666;margin-bottom:2px}
+.invoice-signature-area .signature-preview{margin:0 auto 4px}
+.signature-line{height:45px;border-bottom:1px solid #555}
+
+@media(max-width:560px){
+  .invoice-paper{max-width:100%;border-radius:14px}
+  .invoice-head{padding:18px}
+  .invoice-grid{padding:10px 18px}
+  .invoice-items,.invoice-total,.invoice-notes,.invoice-custom-fields{padding-left:18px;padding-right:18px}
+  .invoice-signature-area{padding:14px 18px 18px}
+  .invoice-actions{padding-top:12px}
+  .invoice-actions button{flex:1 1 calc(50% - 10px);min-width:0}
+}
+
+@media print{
+  @page{size:A4 portrait;margin:10mm}
+  html,body,#root{background:#fff!important}
+  .topbar,.bottom-nav,.more-shortcuts,.side-menu,.side-menu-backdrop,.page-heading,.invoice-actions,.no-print{display:none!important}
+  .app{padding:0!important}
+  .dashboard{width:190mm!important;max-width:190mm!important;padding:0!important;margin:0!important}
+  .invoice-paper{width:190mm!important;max-width:190mm!important;min-height:277mm!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
+  .invoice-head{padding:12mm 8mm 6mm}
+  .invoice-grid{padding:4mm 8mm}
+  .invoice-items{padding:5mm 8mm}
+  .invoice-total{padding:5mm 8mm}
+  .invoice-notes{padding:0 8mm}
+  .invoice-signature-area{padding:5mm 8mm 2mm}
+  .invoice-logo{width:60px;height:60px}
+}
