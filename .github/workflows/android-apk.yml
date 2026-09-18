@@ -31,6 +31,27 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Add Android Notification Permission
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          permission = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
+
+          if permission not in text:
+              text = text.replace(
+                  '<application',
+                  permission + '\n\n    <application',
+                  1
+              )
+
+          manifest.write_text(text)
+          print("Android exact alarm permission added.")
+          PY
+
       - name: Generate Android App Icon
         run: |
           npx @capacitor/assets generate \
