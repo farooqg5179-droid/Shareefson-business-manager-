@@ -5,8 +5,10 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import { Filesystem, Directory } from "@capacitor/filesystem";
-import { Share } from "@capacitor/share";
+import { Media } from "@capacitor-community/media";
+import { Printer } from "@capgo/capacitor-printer";
+
+const REMINDER_CHANNEL_ID = "shareef-son-booking-reminders";
 
 function hashToNotificationId(value) {
   const str = String(value || "");
@@ -17,101 +19,116 @@ function hashToNotificationId(value) {
   return Math.abs(hash) % 2147483000 || 1;
 }
 
-const REMINDER_CHANNEL_ID = "shareef-sons-booking-reminders";
+function getBookingReminderDate(booking) {
+  if (!booking?.reminder_date) return null;
+  const dateText = String(booking.reminder_date);
+  const timeText = String(booking.reminder_time || "09:00");
+  const when = new Date(`${dateText}T${timeText}:00`);
+  return Number.isNaN(when.getTime()) ? null : when;
+}
 
-async function prepareLocalNotifications() {
-  if (!Capacitor.isNativePlatform()) return false;
+async function ensureNativeReminderReady(openExactSettings = false) {
+  if (!Capacitor.isNativePlatform()) return true;
   try {
-    let permission = await LocalNotifications.checkPermissions();
+    const permission = await LocalNotifications.checkPermissions();
     if (permission.display !== "granted") {
-      permission = await LocalNotifications.requestPermissions();
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== "granted") return false;
     }
-    if (permission.display !== "granted") return false;
 
-    try {
-      await LocalNotifications.createChannel({
-        id: REMINDER_CHANNEL_ID,
-        name: "Booking Reminders",
-        description: "Shareef Sons booking reminders",
-        importance: 5,
-        visibility: 1,
-        sound: "default",
-        vibration: true
-      });
-    } catch (e) {}
+    await LocalNotifications.createChannel({
+      id: REMINDER_CHANNEL_ID,
+      name: "Booking Reminders",
+      description: "Shareef Sons event booking reminders",
+      importance: 4,
+      visibility: 1,
+      vibration: true,
+    }).catch(() => {});
+
+    if (typeof LocalNotifications.checkExactNotificationSetting === "function") {
+      const exact = await LocalNotifications.checkExactNotificationSetting();
+      if (exact.exact_alarm !== "granted") {
+        if (openExactSettings && typeof LocalNotifications.changeExactNotificationSetting === "function") {
+          await LocalNotifications.changeExactNotificationSetting();
+        }
+        const after = await LocalNotifications.checkExactNotificationSetting().catch(() => exact);
+        return after.exact_alarm === "granted";
+      }
+    }
+
     return true;
   } catch (e) {
-    console.warn("Local notification permission/setup failed", e);
+    console.error("Notification setup error", e);
     return false;
   }
 }
 
-function reminderDate(booking) {
-  if (!booking?.reminder_date) return null;
-  const time = booking.reminder_time || "09:00";
-  const when = new Date(`${booking.reminder_date}T${time}:00`);
-  return Number.isNaN(when.getTime()) ? null : when;
-}
-
-async function scheduleBookingReminder(booking) {
-  if (!Capacitor.isNativePlatform() || !booking?.id) return;
+async function scheduleBookingReminder(booking, openExactSettings = false) {
+  if (!Capacitor.isNativePlatform() || !booking?.id) return false;
   const notifId = hashToNotificationId(booking.id);
 
   try {
     await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
   } catch (e) {}
 
-  if (!booking.reminder_enabled || !booking.reminder_date || !booking.reminder_time) return;
-  if (booking.status === "Completed" || booking.status === "Cancelled") return;
+  if (!booking.reminder_enabled || !booking.reminder_date) return true;
 
-  const when = reminderDate(booking);
-  if (!when || when.getTime() <= Date.now()) return;
+  const when = getBookingReminderDate(booking);
+  if (!when || when.getTime() <= Date.now()) return true;
 
-  const ready = await prepareLocalNotifications();
-  if (!ready) return;
+  const ready = await ensureNativeReminderReady(openExactSettings);
+  if (!ready) return false;
+
+  const customerName = booking.customer_name || booking.ss_customers?.name || "Customer";
+  const title = "Shareef Sons Reminder";
+  const body = `${booking.event_type || "Event"} for ${customerName}${booking.reminder_note ? " — " + booking.reminder_note : ""}`;
 
   try {
-    await LocalNotifications.schedule({
+    const result = await LocalNotifications.schedule({
       notifications: [{
         id: notifId,
-        title: "Shareef Sons Reminder",
-        body: `${booking.event_type || "Event"} for ${booking.customer_name || booking.ss_customers?.name || "Customer"}${booking.reminder_note ? " — " + booking.reminder_note : ""}`,
-        schedule: { at: when, allowWhileIdle: true },
+        title,
+        body,
         channelId: REMINDER_CHANNEL_ID,
-        sound: "default",
-        extra: { bookingId: booking.id }
-      }]
+        schedule: { at: when, allowWhileIdle: true },
+        extra: { bookingId: booking.id },
+      }],
     });
+    console.log("Booking reminder scheduled", result, when);
+    return true;
   } catch (e) {
     console.error("Reminder schedule error", e);
+    return false;
+  }
+}
+
+async function syncBookingReminders(bookings) {
+  if (!Capacitor.isNativePlatform()) return;
+  const ready = await ensureNativeReminderReady(false);
+  if (!ready) return;
+
+  const rows = Array.isArray(bookings) ? bookings : [];
+  for (const booking of rows) {
+    const notifId = hashToNotificationId(booking.id);
+    try {
+      await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
+    } catch (e) {}
+
+    if (!booking.reminder_enabled) continue;
+    const when = getBookingReminderDate(booking);
+    if (!when || when.getTime() <= Date.now()) continue;
+
+    await scheduleBookingReminder(booking, false);
   }
 }
 
 async function cancelBookingReminder(bookingId) {
   if (!Capacitor.isNativePlatform() || !bookingId) return;
   try {
-    await LocalNotifications.cancel({ notifications: [{ id: hashToNotificationId(bookingId) }] });
+    await LocalNotifications.cancel({
+      notifications: [{ id: hashToNotificationId(bookingId) }],
+    });
   } catch (e) {}
-}
-
-async function syncBookingReminders(rows = []) {
-  if (!Capacitor.isNativePlatform()) return;
-  const ready = await prepareLocalNotifications();
-  if (!ready) return;
-
-  const now = Date.now();
-  for (const booking of rows) {
-    if (!booking?.id) continue;
-    try {
-      await cancelBookingReminder(booking.id);
-      const when = reminderDate(booking);
-      if (!booking.reminder_enabled || !when || when.getTime() <= now) continue;
-      if (booking.status === "Completed" || booking.status === "Cancelled") continue;
-      await scheduleBookingReminder(booking);
-    } catch (e) {
-      console.warn("Reminder sync failed", e);
-    }
-  }
 }
 
 const EVENT_TYPES = [
@@ -416,15 +433,30 @@ function App() {
   }, [session?.user?.id]);
 
   async function requestReminderPermission() {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      try { await Notification.requestPermission(); } catch (e) {}
+    if (!Capacitor.isNativePlatform()) {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        await Notification.requestPermission().catch(() => {});
+      }
+      return;
     }
-    await prepareLocalNotifications();
+
+    const ready = await ensureNativeReminderReady(true);
+    if (!ready) {
+      setNotificationMessage("Please allow Notifications and Alarms & reminders for booking reminders.");
+    } else {
+      setNotificationMessage("Booking reminders are enabled.");
+    }
   }
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    prepareLocalNotifications();
+    LocalNotifications.requestPermissions().catch(() => {});
+    LocalNotifications.addListener("localNotificationReceived", notification => {
+      setNotificationMessage(notification.body || notification.title || "Booking reminder");
+    }).catch(() => {});
+    return () => {
+      LocalNotifications.removeAllListeners().catch(() => {});
+    };
   }, []);
 
   async function handleAuth(e) {
@@ -773,7 +805,7 @@ function App() {
     if (!error) {
       const rows = data || [];
       setBookings(rows);
-      syncBookingReminders(rows);
+      syncBookingReminders(rows).catch(() => {});
     }
   }
 
@@ -851,7 +883,12 @@ function App() {
       return;
     }
 
-    if (savedBooking) scheduleBookingReminder(savedBooking);
+    if (savedBooking) {
+      const reminderReady = await scheduleBookingReminder(savedBooking, Boolean(savedBooking.reminder_enabled));
+      if (savedBooking.reminder_enabled && !reminderReady) {
+        setNotificationMessage("Reminder save ho gaya, lekin Android mein Notifications / Alarms & reminders permission allow karni hogi.");
+      }
+    }
 
     await loadBookings();
     setCurrentPage("bookings");
@@ -1589,6 +1626,140 @@ function App() {
     );
   }
 
+  async function buildInvoiceCanvas() {
+    const source = document.getElementById("invoice-print-area");
+    if (!source) throw new Error("Invoice area not found.");
+
+    const clone = source.cloneNode(true);
+    clone.querySelectorAll(".no-print, .invoice-actions, .invoice-footer").forEach(node => node.remove());
+    clone.style.width = "794px";
+    clone.style.maxWidth = "794px";
+    clone.style.minHeight = "1123px";
+    clone.style.margin = "0";
+    clone.style.border = "0";
+    clone.style.borderRadius = "0";
+    clone.style.boxShadow = "none";
+    clone.style.background = "#ffffff";
+    clone.style.position = "fixed";
+    clone.style.left = "-10000px";
+    clone.style.top = "0";
+    clone.style.zIndex = "-1";
+    document.body.appendChild(clone);
+
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        width: 794,
+        windowWidth: 794,
+      });
+    } finally {
+      clone.remove();
+    }
+  }
+
+  function canvasToA4Pdf(canvas) {
+    const pdf = new jsPDF("p", "mm", "a4");
+    const margin = 10;
+    const contentWidth = 190;
+    const contentHeight = 277;
+    const pageHeightPx = Math.floor(canvas.width * (contentHeight / contentWidth));
+
+    for (let offset = 0; offset < canvas.height; offset += pageHeightPx) {
+      const sliceHeight = Math.min(pageHeightPx, canvas.height - offset);
+      const slice = document.createElement("canvas");
+      slice.width = canvas.width;
+      slice.height = sliceHeight;
+      const ctx = slice.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, slice.width, slice.height);
+      ctx.drawImage(canvas, 0, offset, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+      const renderedHeight = sliceHeight * contentWidth / canvas.width;
+      if (offset > 0) pdf.addPage();
+      pdf.addImage(slice.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin, contentWidth, renderedHeight);
+    }
+    return pdf;
+  }
+
+  async function saveInvoicePdf() {
+    try {
+      const canvas = await buildInvoiceCanvas();
+      const pdf = canvasToA4Pdf(canvas);
+      const filename = `${selectedInvoice?.invoice_number || "invoice"}.pdf`;
+
+      if (Capacitor.isNativePlatform()) {
+        const dataUri = pdf.output("datauristring");
+        const base64 = dataUri.split(",")[1];
+        await Printer.printBase64({ name: filename.replace(/\.pdf$/i, ""), data: base64, mimeType: "application/pdf" });
+        return;
+      }
+
+      pdf.save(filename);
+    } catch (e) {
+      alert(e?.message || "PDF creation failed.");
+    }
+  }
+
+  async function saveInvoiceToGallery() {
+    try {
+      const canvas = await buildInvoiceCanvas();
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const filename = `${selectedInvoice?.invoice_number || "invoice"}`;
+
+      if (Capacitor.isNativePlatform()) {
+        const albumName = "Shareef Sons Invoices";
+        let { albums } = await Media.getAlbums();
+        let album = albums?.find(a => a.name === albumName);
+        if (!album) {
+          await Media.createAlbum({ name: albumName });
+          ({ albums } = await Media.getAlbums());
+          album = albums?.find(a => a.name === albumName);
+        }
+        if (!album?.identifier) throw new Error("Invoice gallery album could not be created.");
+
+        await Media.savePhoto({
+          path: dataUrl,
+          albumIdentifier: album.identifier,
+          fileName: filename,
+        });
+        setNotificationMessage("Invoice Gallery mein save ho gaya.");
+        return;
+      }
+
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `${filename}.jpg`;
+      a.click();
+    } catch (e) {
+      alert(e?.message || "Gallery save failed.");
+    }
+  }
+
+  async function printInvoice() {
+    try {
+      const canvas = await buildInvoiceCanvas();
+      const pdf = canvasToA4Pdf(canvas);
+
+      if (Capacitor.isNativePlatform()) {
+        const dataUri = pdf.output("datauristring");
+        const base64 = dataUri.split(",")[1];
+        await Printer.printBase64({
+          name: selectedInvoice?.invoice_number || "Invoice",
+          data: base64,
+          mimeType: "application/pdf",
+        });
+        return;
+      }
+
+      window.print();
+    } catch (e) {
+      alert(e?.message || "Print failed.");
+    }
+  }
+
   function renderInvoiceDetail() {
     if (!selectedInvoice) return renderInvoices();
     return (
@@ -1622,88 +1793,14 @@ function App() {
           <div className="invoice-signature-area">
             <div><span>Authorized Signature</span>{signaturePreview ? <img src={signaturePreview} className="signature-preview" alt="Digital signature" /> : <div className="signature-line" />}</div>
           </div>
-          <div className="invoice-footer">
-            {logoPreview && <img src={logoPreview} alt="Business logo" />}
-            <div><strong>{businessName}</strong><span>{phone}{whatsapp ? ` • WhatsApp: ${whatsapp}` : ""}</span><small>Thank you for choosing Shareef Sons Events Organizer</small></div>
-          </div>
+        </div>
 
-          <div className="button-row no-print invoice-actions">
-            <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit</button>
-            <button type="button" className="secondary-button" onClick={async () => {
-              try {
-                const el = document.getElementById("invoice-print-area");
-                if (!el) throw new Error("Invoice area not found.");
-                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-                const base64 = canvas.toDataURL("image/png").split(",")[1];
-                const name = `${selectedInvoice.invoice_number || "invoice"}.png`;
-                if (Capacitor.isNativePlatform()) {
-                  await Filesystem.writeFile({ path: name, data: base64, directory: Directory.Cache });
-                  const { uri } = await Filesystem.getUri({ path: name, directory: Directory.Cache });
-                  await Share.share({ title: "Invoice", text: name, files: [uri] });
-                } else {
-                  const a = document.createElement("a");
-                  a.href = canvas.toDataURL("image/png");
-                  a.download = name;
-                  document.body.appendChild(a); a.click(); a.remove();
-                }
-              } catch (e) { alert(e?.message || "Could not save/share invoice image."); }
-            }}>↓ Save to Gallery</button>
-            <button type="button" className="secondary-button" onClick={async () => {
-              try {
-                const el = document.getElementById("invoice-print-area");
-                if (!el) throw new Error("Invoice area not found.");
-                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-                const pdf = new jsPDF("p", "mm", "a4");
-                const pageWidth = 190;
-                const pageHeight = 277;
-                const imgHeight = canvas.height * pageWidth / canvas.width;
-                let rendered = 0;
-                const image = canvas.toDataURL("image/jpeg", 0.95);
-                while (rendered < imgHeight) {
-                  if (rendered > 0) pdf.addPage();
-                  pdf.addImage(image, "JPEG", 10, 10 - rendered, pageWidth, imgHeight);
-                  rendered += pageHeight;
-                }
-                const filename = `${selectedInvoice.invoice_number || "invoice"}.pdf`;
-                if (Capacitor.isNativePlatform()) {
-                  const base64 = pdf.output("datauristring").split(",")[1];
-                  await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
-                  const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
-                  await Share.share({ title: "Invoice PDF", text: filename, files: [uri] });
-                } else {
-                  pdf.save(filename);
-                }
-              } catch (e) { alert(e?.message || "PDF creation failed."); }
-            }}>📄 Save PDF</button>
-            <button type="button" className="secondary-button" onClick={async () => {
-              try {
-                const el = document.getElementById("invoice-print-area");
-                if (!el) throw new Error("Invoice area not found.");
-                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-                const pdf = new jsPDF("p", "mm", "a4");
-                const pageWidth = 190;
-                const pageHeight = 277;
-                const imgHeight = canvas.height * pageWidth / canvas.width;
-                const image = canvas.toDataURL("image/jpeg", 0.95);
-                let rendered = 0;
-                while (rendered < imgHeight) {
-                  if (rendered > 0) pdf.addPage();
-                  pdf.addImage(image, "JPEG", 10, 10 - rendered, pageWidth, imgHeight);
-                  rendered += pageHeight;
-                }
-                const filename = `${selectedInvoice.invoice_number || "invoice"}-print.pdf`;
-                if (Capacitor.isNativePlatform()) {
-                  const base64 = pdf.output("datauristring").split(",")[1];
-                  await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
-                  const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
-                  await Share.share({ title: "Print Invoice", text: "Choose Print from the Android share sheet", files: [uri] });
-                } else {
-                  window.print();
-                }
-              } catch (e) { alert(e?.message || "Could not prepare invoice for printing."); }
-            }}>🖨 Print</button>
-            <button className="danger-button" onClick={() => deleteInvoice(selectedInvoice)}>Delete</button>
-          </div>
+        <div className="button-row no-print invoice-actions">
+          <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit</button>
+          <button className="secondary-button" onClick={printInvoice}>🖨 Print</button>
+          <button className="secondary-button" onClick={saveInvoicePdf}>📄 Save PDF</button>
+          <button className="secondary-button" onClick={saveInvoiceToGallery}>↓ Save to Gallery</button>
+          <button className="danger-button" onClick={() => deleteInvoice(selectedInvoice)}>Delete</button>
         </div>
       </div>
     );
