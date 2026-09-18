@@ -5,6 +5,8 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 
 function hashToNotificationId(value) {
   const str = String(value || "");
@@ -12,28 +14,77 @@ function hashToNotificationId(value) {
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
   }
-  return Math.abs(hash) % 2147483000;
+  return Math.abs(hash) % 2147483000 || 1;
+}
+
+const REMINDER_CHANNEL_ID = "shareef-sons-booking-reminders";
+
+async function prepareLocalNotifications() {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    let permission = await LocalNotifications.checkPermissions();
+    if (permission.display !== "granted") {
+      permission = await LocalNotifications.requestPermissions();
+    }
+    if (permission.display !== "granted") return false;
+
+    try {
+      await LocalNotifications.createChannel({
+        id: REMINDER_CHANNEL_ID,
+        name: "Booking Reminders",
+        description: "Shareef Sons booking reminders",
+        importance: 5,
+        visibility: 1,
+        sound: "default",
+        vibration: true
+      });
+    } catch (e) {}
+    return true;
+  } catch (e) {
+    console.warn("Local notification permission/setup failed", e);
+    return false;
+  }
+}
+
+function reminderDate(booking) {
+  if (!booking?.reminder_date) return null;
+  const time = booking.reminder_time || "09:00";
+  const when = new Date(`${booking.reminder_date}T${time}:00`);
+  return Number.isNaN(when.getTime()) ? null : when;
 }
 
 async function scheduleBookingReminder(booking) {
   if (!Capacitor.isNativePlatform() || !booking?.id) return;
   const notifId = hashToNotificationId(booking.id);
+
   try {
     await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
   } catch (e) {}
-  if (!booking.reminder_enabled || !booking.reminder_date) return;
-  const when = new Date(`${booking.reminder_date}T${booking.reminder_time || "09:00"}:00`);
-  if (isNaN(when.getTime()) || when.getTime() <= Date.now()) return;
+
+  if (!booking.reminder_enabled || !booking.reminder_date || !booking.reminder_time) return;
+  if (booking.status === "Completed" || booking.status === "Cancelled") return;
+
+  const when = reminderDate(booking);
+  if (!when || when.getTime() <= Date.now()) return;
+
+  const ready = await prepareLocalNotifications();
+  if (!ready) return;
+
   try {
     await LocalNotifications.schedule({
       notifications: [{
         id: notifId,
         title: "Shareef Sons Reminder",
-        body: `${booking.event_type || "Event"} for ${booking.customer_name || "Customer"}${booking.reminder_note ? " — " + booking.reminder_note : ""}`,
-        schedule: { at: when },
-      }],
+        body: `${booking.event_type || "Event"} for ${booking.customer_name || booking.ss_customers?.name || "Customer"}${booking.reminder_note ? " — " + booking.reminder_note : ""}`,
+        schedule: { at: when, allowWhileIdle: true },
+        channelId: REMINDER_CHANNEL_ID,
+        sound: "default",
+        extra: { bookingId: booking.id }
+      }]
     });
-  } catch (e) { console.error("Reminder schedule error", e); }
+  } catch (e) {
+    console.error("Reminder schedule error", e);
+  }
 }
 
 async function cancelBookingReminder(bookingId) {
@@ -41,6 +92,26 @@ async function cancelBookingReminder(bookingId) {
   try {
     await LocalNotifications.cancel({ notifications: [{ id: hashToNotificationId(bookingId) }] });
   } catch (e) {}
+}
+
+async function syncBookingReminders(rows = []) {
+  if (!Capacitor.isNativePlatform()) return;
+  const ready = await prepareLocalNotifications();
+  if (!ready) return;
+
+  const now = Date.now();
+  for (const booking of rows) {
+    if (!booking?.id) continue;
+    try {
+      await cancelBookingReminder(booking.id);
+      const when = reminderDate(booking);
+      if (!booking.reminder_enabled || !when || when.getTime() <= now) continue;
+      if (booking.status === "Completed" || booking.status === "Cancelled") continue;
+      await scheduleBookingReminder(booking);
+    } catch (e) {
+      console.warn("Reminder sync failed", e);
+    }
+  }
 }
 
 const EVENT_TYPES = [
@@ -344,41 +415,17 @@ function App() {
     loadNotes();
   }, [session?.user?.id]);
 
-  function requestReminderPermission() {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission();
-    if (Capacitor.isNativePlatform()) {
-      LocalNotifications.requestPermissions().catch(() => {});
+  async function requestReminderPermission() {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      try { await Notification.requestPermission(); } catch (e) {}
     }
+    await prepareLocalNotifications();
   }
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      LocalNotifications.requestPermissions().catch(() => {});
-    }
+    if (!Capacitor.isNativePlatform()) return;
+    prepareLocalNotifications();
   }, []);
-
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    const check = () => {
-      const now = new Date();
-      const todayText = today();
-      const current = `${todayText} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      const due = bookings.filter(b => b.reminder_enabled && b.reminder_date && b.event_date && b.event_date >= todayText && b.status !== "Completed" && b.status !== "Cancelled")
-        .find(b => `${b.reminder_date} ${b.reminder_time || "00:00"}` <= current);
-      if (due) {
-        const key = `ss-reminder-${due.id}-${due.reminder_date}-${due.reminder_time || "00:00"}`;
-        if (localStorage.getItem(key) !== "1") {
-          const msg = `Reminder: ${due.event_type || "Event"} for ${due.customer_name || due.ss_customers?.name || "Customer"}${due.reminder_note ? ` — ${due.reminder_note}` : ""}`;
-          setNotificationMessage(msg);
-          localStorage.setItem(key, "1");
-          if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("Shareef Sons Reminder", { body: msg });
-        }
-      }
-    };
-    check();
-    const timer = setInterval(check, 30000);
-    return () => clearInterval(timer);
-  }, [session?.user?.id, bookings]);
 
   async function handleAuth(e) {
     e.preventDefault();
@@ -723,7 +770,11 @@ function App() {
       .order("event_date", { ascending: true });
 
     setBookingsLoading(false);
-    if (!error) setBookings(data || []);
+    if (!error) {
+      const rows = data || [];
+      setBookings(rows);
+      syncBookingReminders(rows);
+    }
   }
 
   function updateBookingField(field, value) {
@@ -1578,9 +1629,79 @@ function App() {
 
           <div className="button-row no-print invoice-actions">
             <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit</button>
-            <button className="secondary-button" onClick={() => window.print()}>🖨 Print</button>
-            <button className="secondary-button" onClick={async()=>{ try { const el=document.getElementById("invoice-print-area"); const canvas=await html2canvas(el,{scale:2,useCORS:true,backgroundColor:"#ffffff"}); const pdf=new jsPDF("p","mm","a4"); const w=190; const h=canvas.height*w/canvas.width; pdf.addImage(canvas.toDataURL("image/png"),"PNG",10,10,w,Math.min(h,277)); pdf.save(`${selectedInvoice.invoice_number || "invoice"}.pdf`); } catch(e) { alert(e?.message || "PDF creation failed."); } }}>📄 Save PDF</button>
-            <button className="secondary-button" onClick={async()=>{ try { const el=document.getElementById("invoice-print-area"); const canvas=await html2canvas(el,{scale:2,useCORS:true,backgroundColor:"#ffffff"}); const a=document.createElement("a"); a.href=canvas.toDataURL("image/png"); a.download=`${selectedInvoice.invoice_number || "invoice"}.png`; a.click(); } catch(e) { alert(e?.message || "Image save failed."); } }}>↓ Save to Gallery</button>
+            <button type="button" className="secondary-button" onClick={async () => {
+              try {
+                const el = document.getElementById("invoice-print-area");
+                if (!el) throw new Error("Invoice area not found.");
+                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+                const base64 = canvas.toDataURL("image/png").split(",")[1];
+                const name = `${selectedInvoice.invoice_number || "invoice"}.png`;
+                if (Capacitor.isNativePlatform()) {
+                  await Filesystem.writeFile({ path: name, data: base64, directory: Directory.Cache });
+                  const { uri } = await Filesystem.getUri({ path: name, directory: Directory.Cache });
+                  await Share.share({ title: "Invoice", text: name, files: [uri] });
+                } else {
+                  const a = document.createElement("a");
+                  a.href = canvas.toDataURL("image/png");
+                  a.download = name;
+                  document.body.appendChild(a); a.click(); a.remove();
+                }
+              } catch (e) { alert(e?.message || "Could not save/share invoice image."); }
+            }}>↓ Save to Gallery</button>
+            <button type="button" className="secondary-button" onClick={async () => {
+              try {
+                const el = document.getElementById("invoice-print-area");
+                if (!el) throw new Error("Invoice area not found.");
+                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+                const pdf = new jsPDF("p", "mm", "a4");
+                const pageWidth = 190;
+                const pageHeight = 277;
+                const imgHeight = canvas.height * pageWidth / canvas.width;
+                let rendered = 0;
+                const image = canvas.toDataURL("image/jpeg", 0.95);
+                while (rendered < imgHeight) {
+                  if (rendered > 0) pdf.addPage();
+                  pdf.addImage(image, "JPEG", 10, 10 - rendered, pageWidth, imgHeight);
+                  rendered += pageHeight;
+                }
+                const filename = `${selectedInvoice.invoice_number || "invoice"}.pdf`;
+                if (Capacitor.isNativePlatform()) {
+                  const base64 = pdf.output("datauristring").split(",")[1];
+                  await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
+                  const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+                  await Share.share({ title: "Invoice PDF", text: filename, files: [uri] });
+                } else {
+                  pdf.save(filename);
+                }
+              } catch (e) { alert(e?.message || "PDF creation failed."); }
+            }}>📄 Save PDF</button>
+            <button type="button" className="secondary-button" onClick={async () => {
+              try {
+                const el = document.getElementById("invoice-print-area");
+                if (!el) throw new Error("Invoice area not found.");
+                const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+                const pdf = new jsPDF("p", "mm", "a4");
+                const pageWidth = 190;
+                const pageHeight = 277;
+                const imgHeight = canvas.height * pageWidth / canvas.width;
+                const image = canvas.toDataURL("image/jpeg", 0.95);
+                let rendered = 0;
+                while (rendered < imgHeight) {
+                  if (rendered > 0) pdf.addPage();
+                  pdf.addImage(image, "JPEG", 10, 10 - rendered, pageWidth, imgHeight);
+                  rendered += pageHeight;
+                }
+                const filename = `${selectedInvoice.invoice_number || "invoice"}-print.pdf`;
+                if (Capacitor.isNativePlatform()) {
+                  const base64 = pdf.output("datauristring").split(",")[1];
+                  await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
+                  const { uri } = await Filesystem.getUri({ path: filename, directory: Directory.Cache });
+                  await Share.share({ title: "Print Invoice", text: "Choose Print from the Android share sheet", files: [uri] });
+                } else {
+                  window.print();
+                }
+              } catch (e) { alert(e?.message || "Could not prepare invoice for printing."); }
+            }}>🖨 Print</button>
             <button className="danger-button" onClick={() => deleteInvoice(selectedInvoice)}>Delete</button>
           </div>
         </div>
