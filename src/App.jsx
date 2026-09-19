@@ -107,8 +107,15 @@ async function scheduleBookingReminder(booking, openExactSettings = false) {
     const pending = typeof LocalNotifications.getPending === "function"
       ? await LocalNotifications.getPending().catch(() => ({ notifications: [] }))
       : null;
-    const stillPending = pending?.notifications?.some(item => item.id === notifId);
-    console.log("Booking reminder scheduled", result, when, { stillPending, pending });
+    const stillPending = pending?.notifications?.some(item => Number(item.id) === Number(notifId));
+    console.log("Booking reminder scheduled", {
+      notificationId: notifId,
+      bookingId: booking.id,
+      scheduledFor: when.toString(),
+      result,
+      stillPending,
+      pending
+    });
     return stillPending !== false;
   } catch (e) {
     console.error("Reminder schedule error", e);
@@ -118,20 +125,50 @@ async function scheduleBookingReminder(booking, openExactSettings = false) {
 
 async function syncBookingReminders(bookings) {
   if (!Capacitor.isNativePlatform()) return;
+
   const ready = await ensureNativeReminderReady(false);
   if (!ready) return;
 
   const rows = Array.isArray(bookings) ? bookings : [];
+
+  // IMPORTANT: Do not blindly cancel + recreate reminders every time
+  // bookings are loaded. That caused a possible cancel/reschedule race.
+  // Only create a reminder when Android does not already have it pending.
+  let pending = null;
+  if (typeof LocalNotifications.getPending === "function") {
+    pending = await LocalNotifications.getPending().catch(() => ({ notifications: [] }));
+  }
+
+  const pendingIds = new Set(
+    (pending?.notifications || []).map(item => Number(item.id))
+  );
+
   for (const booking of rows) {
+    if (!booking?.id) continue;
+
     const notifId = hashToNotificationId(booking.id);
-    try {
-      await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
-    } catch (e) {}
 
-    if (!booking.reminder_enabled) continue;
+    if (!booking.reminder_enabled) {
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
+      } catch (e) {}
+      continue;
+    }
+
     const when = getBookingReminderDate(booking);
-    if (!when || when.getTime() <= Date.now()) continue;
 
+    // Reminder date/time has already passed: make sure an old alarm is removed.
+    if (!when || when.getTime() <= Date.now()) {
+      try {
+        await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
+      } catch (e) {}
+      continue;
+    }
+
+    // Android already has this exact reminder. Leave it alone.
+    if (pending && pendingIds.has(notifId)) continue;
+
+    // Missing from Android: create it now.
     await scheduleBookingReminder(booking, false);
   }
 }
@@ -993,6 +1030,8 @@ function App() {
       }
     }
 
+    // loadBookings() also reconciles reminders, but it now preserves an
+    // already-pending Android reminder instead of cancelling/recreating it.
     await loadBookings();
     setCurrentPage("bookings");
   }
