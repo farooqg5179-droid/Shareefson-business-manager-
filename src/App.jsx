@@ -8,7 +8,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { Media } from "@capacitor-community/media";
 import { Printer } from "@capgo/capacitor-printer";
 
-const REMINDER_CHANNEL_ID = "shareef-son-booking-reminders";
+const REMINDER_CHANNEL_ID = "shareef-son-booking-reminders-v2";
 
 function hashToNotificationId(value) {
   const str = String(value || "");
@@ -88,12 +88,17 @@ async function scheduleBookingReminder(booking, openExactSettings = false) {
         title,
         body,
         channelId: REMINDER_CHANNEL_ID,
-        schedule: { at: when, allowWhileIdle: true },
+        schedule: { at: when },
+        largeIcon: "shareef_sons_notification",
         extra: { bookingId: booking.id },
       }],
     });
-    console.log("Booking reminder scheduled", result, when);
-    return true;
+    const pending = typeof LocalNotifications.getPending === "function"
+      ? await LocalNotifications.getPending().catch(() => ({ notifications: [] }))
+      : null;
+    const stillPending = pending?.notifications?.some(item => item.id === notifId);
+    console.log("Booking reminder scheduled", result, when, { stillPending, pending });
+    return stillPending !== false;
   } catch (e) {
     console.error("Reminder schedule error", e);
     return false;
@@ -397,8 +402,7 @@ function App() {
     async function init() {
       if (!supabase?.auth) {
         if (mounted) {
-          setAuthError("Supabase authentication is not available. Please check the app configuration.");
-          setLoading(false);
+          setAuthError("Supabase authentication is not available. Please check the app configuration.");          setLoading(false);
         }
         return;
       }
@@ -477,13 +481,21 @@ function App() {
           channelId: REMINDER_CHANNEL_ID,
           schedule: {
             at: new Date(Date.now() + 10000),
-            allowWhileIdle: true,
           },
+          largeIcon: "shareef_sons_notification",
           extra: { testNotification: true },
         }],
       });
 
-      setNotificationMessage("Test notification scheduled. Phone ko lock karke 10 seconds wait karein.");
+      const pending = typeof LocalNotifications.getPending === "function"
+        ? await LocalNotifications.getPending().catch(() => ({ notifications: [] }))
+        : null;
+      const scheduled = pending?.notifications?.some(item => item.id === testId);
+      setNotificationMessage(
+        scheduled === false
+          ? "Test notification schedule nahi hui. Android notification/alarm permission check karein."
+          : "Test notification scheduled. Phone ko lock karke 10 seconds wait karein."
+      );
     } catch (e) {
       console.error("Test notification error", e);
       setNotificationMessage(e?.message || "Test notification schedule failed.");
@@ -797,8 +809,7 @@ function App() {
     setEditWhatsapp(customer.whatsapp_number || "");
     setEditAddress(customer.address || "");
     setEditNotes(customer.notes || "");
-    setEditCustomData(customer.custom_data || {});
-    setEditMessage("");
+    setEditCustomData(customer.custom_data || {});    setEditMessage("");
   }
 
   async function updateCustomer(e) {
@@ -1197,8 +1208,7 @@ function App() {
 
     setExpenseForm({
       title: "", category: "", amount: 0, expense_date: today(),
-      payment_method: "Cash", notes: ""
-    });
+      payment_method: "Cash", notes: ""    });
     await loadExpenses();
     setExpenseMessage("Expense saved.");
   }
@@ -1597,8 +1607,7 @@ function App() {
           <label>Customer *</label>
           <CustomerPicker value={bookingForm.customer_name} customerId={bookingForm.customer_id} customers={customers} required onChange={(name, id) => setBookingForm(p => ({ ...p, customer_name: name, customer_id: id }))} />
           <label>Event Type</label>
-          <SuggestionPicker value={bookingForm.event_type} options={EVENT_TYPES} placeholder="Type event or choose suggestion" onChange={v => updateBookingField("event_type", v)} />
-          <div className="two-col"><div><label>Event Date</label><input type="date" value={bookingForm.event_date || ""} onChange={e => updateBookingField("event_date", e.target.value)} /></div><div><label>Event Time</label><input type="time" value={bookingForm.event_time || ""} onChange={e => updateBookingField("event_time", e.target.value)} /></div></div>
+          <SuggestionPicker value={bookingForm.event_type} options={EVENT_TYPES} placeholder="Type event or choose suggestion" onChange={v => updateBookingField("event_type", v)} />          <div className="two-col"><div><label>Event Date</label><input type="date" value={bookingForm.event_date || ""} onChange={e => updateBookingField("event_date", e.target.value)} /></div><div><label>Event Time</label><input type="time" value={bookingForm.event_time || ""} onChange={e => updateBookingField("event_time", e.target.value)} /></div></div>
           <label>Venue</label><input value={bookingForm.venue} onChange={e => updateBookingField("venue", e.target.value)} />
           <div className="two-col"><div><label>Guests</label><input type="number" min="0" value={bookingForm.guests} onChange={e => updateBookingField("guests", e.target.value)} /></div><div><label>Package</label><input value={bookingForm.package_name} onChange={e => updateBookingField("package_name", e.target.value)} /></div></div>
           <label>Services</label><textarea rows="4" value={bookingForm.services} onChange={e => updateBookingField("services", e.target.value)} placeholder="Stage, lights, seating, decoration..." />
@@ -1997,8 +2006,7 @@ function App() {
           <label>Title</label><input value={noteForm.title} onChange={e => setNoteForm(p => ({ ...p, title: e.target.value }))} />
           <label>Note</label><textarea rows="5" value={noteForm.note} onChange={e => setNoteForm(p => ({ ...p, note: e.target.value }))} />
           <div className="two-col">
-            <div><label>Priority</label><select value={noteForm.priority} onChange={e => setNoteForm(p => ({ ...p, priority: e.target.value }))}><option>Normal</option><option>High</option><option>Low</option></select></div>
-            <div><label>Status</label><select value={noteForm.status} onChange={e => setNoteForm(p => ({ ...p, status: e.target.value }))}><option>Open</option><option>Done</option></select></div>
+            <div><label>Priority</label><select value={noteForm.priority} onChange={e => setNoteForm(p => ({ ...p, priority: e.target.value }))}><option>Normal</option><option>High</option><option>Low</option></select></div>            <div><label>Status</label><select value={noteForm.status} onChange={e => setNoteForm(p => ({ ...p, status: e.target.value }))}><option>Open</option><option>Done</option></select></div>
           </div>
           {noteMessage && <p className="form-message">{noteMessage}</p>}
           <div className="button-row">
