@@ -113,3 +113,41 @@
   .invoice-signature-area{padding:5mm 8mm 2mm}
   .invoice-logo{width:60px;height:60px}
 }
+
+/* Professional A4 invoice */
+.professional-invoice-head{align-items:flex-start;border-bottom:2px solid #c9a227}
+.invoice-brand-block{display:flex;align-items:center;gap:14px}
+.invoice-brand-block h2{margin:0 0 5px;font-family:'Playfair Display',serif}
+.invoice-brand-block p{margin:2px 0;color:#666;font-size:12px}
+.invoice-number small{display:block;margin-top:6px;color:#666;font-size:11px}
+.invoice-meta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:20px 26px;border-bottom:1px solid #eee}
+.invoice-meta-grid>div{padding:10px 12px;border:1px solid #e6e0c9;border-radius:10px;background:#fffdf7}
+.invoice-meta-grid span{display:block;color:#777;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.invoice-meta-grid strong{display:block;font-size:13px}
+.invoice-meta-wide{grid-column:1/-1}
+.professional-items h3{margin:0 0 10px}
+.professional-items table{width:100%;border-collapse:collapse}
+.professional-items th,.professional-items td{padding:10px 8px;border-bottom:1px solid #e5e5e5;text-align:left}
+.professional-items th:last-child,.professional-items td:last-child{text-align:right}
+.professional-total{display:grid;gap:8px}
+.professional-total>div{display:flex;justify-content:flex-end;gap:35px}
+.professional-total>div span{min-width:130px;text-align:right}
+.professional-total .grand-total{font-size:18px;padding-top:10px;border-top:1px solid #ccc}
+.professional-total .balance-row{font-size:17px;font-weight:900;color:#735800}
+.invoice-payment-status{margin:0 26px;padding:12px 14px;border:1px solid #e2d39a;border-radius:10px;background:#fffaf0;font-size:13px}
+.professional-notes{margin-top:14px}
+.professional-notes p{white-space:pre-wrap;line-height:1.6}
+.invoice-signature-area small{display:block;color:#666;font-size:10px}
+@media(max-width:560px){
+ .invoice-meta-grid{grid-template-columns:1fr 1fr;padding:14px 18px}
+ .invoice-meta-wide{grid-column:1/-1}
+ .invoice-brand-block{align-items:flex-start}
+ .professional-total>div span{min-width:110px}
+ .invoice-payment-status{margin:0 18px}
+}
+@media print{
+ .professional-invoice{font-size:11px}
+ .invoice-meta-grid{grid-template-columns:repeat(3,1fr)}
+ .professional-items table{page-break-inside:auto}
+ .professional-items tr{page-break-inside:avoid;page-break-after:auto}
+}
