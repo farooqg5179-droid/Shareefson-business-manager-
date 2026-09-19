@@ -32,7 +32,7 @@ function getBookingReminderDate(booking) {
   }
 
   if (!dateText) return null;
-  if (!/^\\d{2}:\\d{2}$/.test(timeText)) timeText = "09:00";
+  if (!/^\d{2}:\d{2}$/.test(timeText)) timeText = "09:00";
 
   const when = new Date(`${dateText}T${timeText}:00`);
   return Number.isNaN(when.getTime()) ? null : when;
@@ -80,10 +80,10 @@ async function scheduleBookingReminder(booking, openExactSettings = false) {
     await LocalNotifications.cancel({ notifications: [{ id: notifId }] });
   } catch (e) {}
 
-  if (!booking.reminder_enabled || !booking.reminder_date) return true;
+  if (!booking.reminder_enabled) return true;
 
   const when = getBookingReminderDate(booking);
-  if (!when || when.getTime() <= Date.now()) return true;
+  if (!when || when.getTime() <= Date.now()) return false;
 
   const ready = await ensureNativeReminderReady(openExactSettings);
   if (!ready) return false;
@@ -99,7 +99,7 @@ async function scheduleBookingReminder(booking, openExactSettings = false) {
         title,
         body,
         channelId: REMINDER_CHANNEL_ID,
-        schedule: { at: when },
+        schedule: { at: when, allowWhileIdle: true },
         largeIcon: "shareef_sons_notification",
         extra: { bookingId: booking.id },
       }],
