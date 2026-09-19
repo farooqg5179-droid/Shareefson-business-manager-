@@ -164,6 +164,14 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function getDefaultReminderDate(eventDate) {
+  if (!eventDate) return "";
+  const date = new Date(`${eventDate}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
 function calcRemaining(total, paid) {
   return Math.max(Number(total || 0) - Number(paid || 0), 0);
 }
@@ -450,14 +458,33 @@ function App() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    LocalNotifications.requestPermissions().catch(() => {});
+
+    let receivedHandle;
+    let actionHandle;
+
     LocalNotifications.addListener("localNotificationReceived", notification => {
       setNotificationMessage(notification.body || notification.title || "Booking reminder");
-    }).catch(() => {});
+    }).then(handle => { receivedHandle = handle; }).catch(() => {});
+
+    LocalNotifications.addListener("localNotificationActionPerformed", action => {
+      const bookingId = action?.notification?.extra?.bookingId;
+      if (!bookingId) return;
+      const booking = bookings.find(item => item.id === bookingId);
+      if (booking) {
+        setSelectedBooking(booking);
+        setCurrentPage("booking-detail");
+      } else {
+        loadBookings();
+        setCurrentPage("bookings");
+      }
+    }).then(handle => { actionHandle = handle; }).catch(() => {});
+
     return () => {
+      receivedHandle?.remove?.();
+      actionHandle?.remove?.();
       LocalNotifications.removeAllListeners().catch(() => {});
     };
-  }, []);
+  }, [bookings]);
 
   async function handleAuth(e) {
     e.preventDefault();
@@ -817,6 +844,10 @@ function App() {
           field === "total_amount" ? value : prev.total_amount,
           field === "advance_amount" ? value : prev.advance_amount
         );
+      }
+      if (field === "event_date" && prev.reminder_enabled) {
+        next.reminder_date = getDefaultReminderDate(value);
+        if (!next.reminder_time) next.reminder_time = "09:00";
       }
       return next;
     });
@@ -1540,7 +1571,16 @@ function App() {
           <div className="two-col"><div><label>Total Amount</label><input type="number" min="0" value={bookingForm.total_amount} onChange={e => updateBookingField("total_amount", e.target.value)} /></div><div><label>Advance</label><input type="number" min="0" value={bookingForm.advance_amount} onChange={e => updateBookingField("advance_amount", e.target.value)} /></div></div>
           <label>Remaining</label><input type="number" value={bookingForm.remaining_amount} readOnly />
           <label>Status</label><select value={bookingForm.status} onChange={e => updateBookingField("status", e.target.value)}>{STATUSES.map(x => <option key={x}>{x}</option>)}</select>
-          <div className="reminder-box booking-reminder"><div className="reminder-title"><div><h3>🔔 Booking Reminder</h3><p>Reminder stays active until the event is completed or its date has passed.</p></div><label className="switch"><input type="checkbox" checked={Boolean(bookingForm.reminder_enabled)} onChange={e => { updateBookingField("reminder_enabled", e.target.checked); if (e.target.checked) requestReminderPermission(); }} /><span></span></label></div>
+          <div className="reminder-box booking-reminder"><div className="reminder-title"><div><h3>🔔 Booking Reminder</h3><p>Reminder stays active until the event is completed or its date has passed.</p></div><label className="switch"><input type="checkbox" checked={Boolean(bookingForm.reminder_enabled)} onChange={e => {
+  const enabled = e.target.checked;
+  setBookingForm(prev => ({
+    ...prev,
+    reminder_enabled: enabled,
+    reminder_date: enabled ? (prev.reminder_date || getDefaultReminderDate(prev.event_date)) : "",
+    reminder_time: enabled ? (prev.reminder_time || "09:00") : ""
+  }));
+  if (enabled) requestReminderPermission();
+}} /><span></span></label></div>
             {bookingForm.reminder_enabled && <><div className="two-col"><div><label>Reminder Date</label><input type="date" value={bookingForm.reminder_date || ""} onChange={e => updateBookingField("reminder_date", e.target.value)} /></div><div><label>Reminder Time</label><input type="time" value={bookingForm.reminder_time || ""} onChange={e => updateBookingField("reminder_time", e.target.value)} /></div></div><label>Reminder Note</label><input value={bookingForm.reminder_note || ""} onChange={e => updateBookingField("reminder_note", e.target.value)} placeholder="What should we remember?" /></>}
           </div>
           <AttachmentUploader section="booking" attachments={bookingForm.attachments || []} onUpload={uploadAttachment} onRemove={removeAttachment} uploading={fileUploading} message={fileMessage} />
@@ -1762,44 +1802,96 @@ function App() {
 
   function renderInvoiceDetail() {
     if (!selectedInvoice) return renderInvoices();
+
+    const customer = selectedInvoice.customer_name
+      || selectedInvoice.ss_customers?.name
+      || customers.find(c => c.id === selectedInvoice.customer_id)?.name
+      || "Customer";
+    const serviceLines = String(selectedInvoice.items || "")
+      .split(/\n|,/)
+      .map(x => x.trim())
+      .filter(Boolean);
+    const lines = serviceLines.length ? serviceLines : ["Event services"];
+    const total = Number(selectedInvoice.total_amount || 0);
+    const paid = Number(selectedInvoice.paid_amount || 0);
+    const balance = Number(selectedInvoice.remaining_amount ?? calcRemaining(total, paid));
+
     return (
       <div className="dashboard">
         <PageHeader title="Invoice Details" action={<button className="secondary-button" onClick={() => setCurrentPage("invoices")}>← Back</button>} />
-        <div id="invoice-print-area" className="invoice-paper">
-          <div className="invoice-head">
-            <div>
+
+        <div id="invoice-print-area" className="invoice-paper professional-invoice">
+          <div className="invoice-head professional-invoice-head">
+            <div className="invoice-brand-block">
               {logoPreview && <img src={logoPreview} className="invoice-logo" alt="Business logo" />}
-              <h2>{businessName}</h2>
-              <p>{address}</p>
-              <p>{phone} {whatsapp ? `• WhatsApp: ${whatsapp}` : ""}</p>
+              <div>
+                <h2>{businessName}</h2>
+                {address && <p>{address}</p>}
+                {(phone || whatsapp) && <p>{phone}{phone && whatsapp ? " • " : ""}{whatsapp ? `WhatsApp: ${whatsapp}` : ""}</p>}
+              </div>
             </div>
-            <div className="invoice-number"><span>INVOICE</span><strong>{selectedInvoice.invoice_number}</strong></div>
+            <div className="invoice-number">
+              <span>INVOICE</span>
+              <strong>{selectedInvoice.invoice_number || "SS-INVOICE"}</strong>
+              <small>Status: {balance > 0 ? "Payment Due" : "Paid in Full"}</small>
+            </div>
           </div>
 
-          <div className="invoice-grid">
-            <Detail label="Customer" value={selectedInvoice.customer_name || selectedInvoice.ss_customers?.name || customers.find(c => c.id === selectedInvoice.customer_id)?.name} />
-            <Detail label="Invoice Date" value={selectedInvoice.invoice_date} />
-            <Detail label="Event Type" value={selectedInvoice.event_type} />
-            <Detail label="Event Date" value={selectedInvoice.event_date} />
-            <Detail label="Event Time" value={selectedInvoice.event_time} />
-            <Detail label="Venue" value={selectedInvoice.venue} />
-            <Detail label="Due Date" value={selectedInvoice.due_date} />
+          <div className="invoice-meta-grid">
+            <div><span>Bill To</span><strong>{customer}</strong></div>
+            <div><span>Invoice Date</span><strong>{selectedInvoice.invoice_date || "—"}</strong></div>
+            <div><span>Due Date</span><strong>{selectedInvoice.due_date || "—"}</strong></div>
+            <div><span>Event</span><strong>{selectedInvoice.event_type || "—"}</strong></div>
+            <div><span>Event Date</span><strong>{selectedInvoice.event_date || "—"}</strong></div>
+            <div><span>Event Time</span><strong>{selectedInvoice.event_time || "—"}</strong></div>
+            <div className="invoice-meta-wide"><span>Venue</span><strong>{selectedInvoice.venue || "—"}</strong></div>
           </div>
 
-          <div className="invoice-items"><h3>Items / Services</h3><p>{selectedInvoice.items || "—"}</p></div>
-          <div className="invoice-total"><span>Subtotal</span><b>{money(selectedInvoice.subtotal)}</b><span>Discount</span><b>{money(selectedInvoice.discount)}</b><span>Total</span><b>{money(selectedInvoice.total_amount)}</b><span>Paid</span><b>{money(selectedInvoice.paid_amount)}</b><span>Remaining</span><b>{money(selectedInvoice.remaining_amount)}</b></div>
-          {(selectedInvoice.attachments || []).length > 0 && <div className="detail-attachments invoice-attachments"><strong>Files & Images</strong>{selectedInvoice.attachments.map(a => <div className="saved-attachment" key={a.id || a.path}><span>{a.name}</span><ImageActions url={a.url} label={a.name} /></div>)}</div>}
-          <p className="invoice-notes"><strong>Notes:</strong> {selectedInvoice.notes || "—"}</p>
+          <div className="invoice-items professional-items">
+            <h3>Services & Description</h3>
+            <table>
+              <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                {lines.map((line, index) => (
+                  <tr key={`${line}-${index}`}><td>{line}</td><td>{index === 0 ? money(selectedInvoice.subtotal) : "—"}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="invoice-total professional-total">
+            <div><span>Subtotal</span><b>{money(selectedInvoice.subtotal)}</b></div>
+            <div><span>Discount</span><b>{money(selectedInvoice.discount)}</b></div>
+            <div className="grand-total"><span>Total Amount</span><b>{money(total)}</b></div>
+            <div><span>Amount Paid</span><b>{money(paid)}</b></div>
+            <div className="balance-row"><span>Balance Due</span><b>{money(balance)}</b></div>
+          </div>
+
+          <div className="invoice-payment-status">
+            Payment Status: <strong>{balance > 0 ? "Payment Due" : "Paid in Full"}</strong>
+          </div>
+
+          {selectedInvoice.notes && (
+            <div className="invoice-notes professional-notes">
+              <strong>Notes & Terms</strong>
+              <p>{selectedInvoice.notes}</p>
+            </div>
+          )}
+
           <div className="invoice-signature-area">
-            <div><span>Authorized Signature</span>{signaturePreview ? <img src={signaturePreview} className="signature-preview" alt="Digital signature" /> : <div className="signature-line" />}</div>
+            <div>
+              <span>Authorized Signature</span>
+              {signaturePreview ? <img src={signaturePreview} className="signature-preview" alt="Digital signature" /> : <div className="signature-line" />}
+              <small>{businessName}</small>
+            </div>
           </div>
         </div>
 
         <div className="button-row no-print invoice-actions">
-          <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit</button>
-          <button className="secondary-button" onClick={printInvoice}>🖨 Print</button>
-          <button className="secondary-button" onClick={saveInvoicePdf}>📄 Save PDF</button>
-          <button className="secondary-button" onClick={saveInvoiceToGallery}>↓ Save to Gallery</button>
+          <button className="gold-button" onClick={() => openEditInvoice(selectedInvoice)}>Edit Invoice</button>
+          <button className="secondary-button" onClick={printInvoice}>🖨 Print A4</button>
+          <button className="secondary-button" onClick={saveInvoicePdf}>📄 Save A4 PDF</button>
+          <button className="secondary-button" onClick={saveInvoiceToGallery}>↓ Save Image</button>
           <button className="danger-button" onClick={() => deleteInvoice(selectedInvoice)}>Delete</button>
         </div>
       </div>
