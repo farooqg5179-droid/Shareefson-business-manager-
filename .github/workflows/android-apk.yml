@@ -39,18 +39,28 @@ jobs:
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
 
-          permission = '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
-          exact_permission = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
+          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          exact_permission = '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
 
-          if permission not in text:
-              text = text.replace('<application', permission + '\n\n    <application', 1)
+          # Add permissions immediately after the opening <manifest> tag.
+          # This keeps the generated AndroidManifest.xml valid XML.
+          import re
+          manifest_match = re.search(r"<manifest\\b[^>]*>", text)
+          if not manifest_match:
+              raise SystemExit("AndroidManifest.xml: opening <manifest> tag not found")
 
-          if exact_permission not in text:
-              text = text.replace('<application', exact_permission + '\n', 1)
+          insert_at = manifest_match.end()
+          permissions = ""
+          if permission.strip() not in text:
+              permissions += "\\n" + permission
+          if exact_permission.strip() not in text:
+              permissions += "\\n" + exact_permission
 
-          manifest.write_text(text)
+          if permissions:
+              text = text[:insert_at] + permissions + text[insert_at:]
+
+          manifest.write_text(text, encoding="utf-8")
           print("Notification and exact-alarm permissions configured.")
-          PY
 
       - name: Generate Android App Icon
         run: |
