@@ -452,7 +452,43 @@ function App() {
     if (!ready) {
       setNotificationMessage("Please allow Notifications and Alarms & reminders for booking reminders.");
     } else {
-      setNotificationMessage("Booking reminders are enabled.");
+      setNotificationMessage("Notifications and Alarms & reminders are ready.");
+    }
+  }
+
+  async function testBookingNotification() {
+    if (!Capacitor.isNativePlatform()) {
+      setNotificationMessage("Test notification is available in the Android app.");
+      return;
+    }
+
+    const ready = await ensureNativeReminderReady(true);
+    if (!ready) {
+      setNotificationMessage("Please allow Notifications and Alarms & reminders first.");
+      return;
+    }
+
+    const testId = 1900000000 + Math.floor(Math.random() * 40000000);
+
+    try {
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: testId,
+          title: "Shareef Sons Test Notification",
+          body: "Notification system is working. This is a 10-second test.",
+          channelId: REMINDER_CHANNEL_ID,
+          schedule: {
+            at: new Date(Date.now() + 10000),
+            allowWhileIdle: true,
+          },
+          extra: { testNotification: true },
+        }],
+      });
+
+      setNotificationMessage("Test notification scheduled. Phone ko lock karke 10 seconds wait karein.");
+    } catch (e) {
+      console.error("Test notification error", e);
+      setNotificationMessage(e?.message || "Test notification schedule failed.");
     }
   }
 
@@ -2034,6 +2070,25 @@ function App() {
             {signatureMessage && <p className="form-message">{signatureMessage}</p>}
           </div>
         </div>
+      </div>
+
+      <div className="customization-card notification-card">
+        <div className="section-heading">
+          <div>
+            <h2>🔔 Notifications & Reminders</h2>
+            <p>Booking reminders use Android notifications and scheduled alarms.</p>
+          </div>
+        </div>
+        <div className="button-row">
+          <button type="button" className="gold-button" onClick={requestReminderPermission}>
+            Enable Notifications
+          </button>
+          <button type="button" className="secondary-button" onClick={testBookingNotification}>
+            Test Notification (10 sec)
+          </button>
+        </div>
+        {notificationMessage && <p className="form-message">{notificationMessage}</p>}
+        <small className="field-hint">Android mein Notifications aur Alarms & reminders dono allow hone chahiye. Test button se pehle system check ho jayega.</small>
       </div>
 
       <div className="danger-zone"><h3>Delete Account</h3><p>This permanently deletes your account and the Shareef Sons business data connected to it.</p><button className="danger-button" onClick={handleDeleteAccount}>Delete Account</button></div>
