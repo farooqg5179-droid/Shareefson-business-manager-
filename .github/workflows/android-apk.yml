@@ -39,7 +39,8 @@ jobs:
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text()
 
-          permission = '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n          exact_permission = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
+          permission = '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          exact_permission = '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
 
           if permission not in text:
               text = text.replace('<application', permission + '\n\n    <application', 1)
