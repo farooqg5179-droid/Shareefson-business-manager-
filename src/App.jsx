@@ -20,9 +20,20 @@ function hashToNotificationId(value) {
 }
 
 function getBookingReminderDate(booking) {
-  if (!booking?.reminder_date) return null;
-  const dateText = String(booking.reminder_date);
-  const timeText = String(booking.reminder_time || "09:00");
+  if (!booking) return null;
+
+  let dateText = String(booking.reminder_date || "").trim();
+  let timeText = String(booking.reminder_time || "09:00").trim();
+
+  // If an enabled booking has no explicit reminder date, use one day before
+  // the event date. This also repairs older bookings saved without reminder_date.
+  if (!dateText && booking.event_date) {
+    dateText = getDefaultReminderDate(booking.event_date);
+  }
+
+  if (!dateText) return null;
+  if (!/^\\d{2}:\\d{2}$/.test(timeText)) timeText = "09:00";
+
   const when = new Date(`${dateText}T${timeText}:00`);
   return Number.isNaN(when.getTime()) ? null : when;
 }
@@ -960,9 +971,25 @@ function App() {
     }
 
     if (savedBooking) {
-      const reminderReady = await scheduleBookingReminder(savedBooking, Boolean(savedBooking.reminder_enabled));
-      if (savedBooking.reminder_enabled && !reminderReady) {
-        setNotificationMessage("Reminder save ho gaya, lekin Android mein Notifications / Alarms & reminders permission allow karni hogi.");
+      // Use the exact values just saved, so reminder scheduling does not
+      // depend on joined customer data or a partial returned row.
+      const reminderBooking = { ...savedBooking, ...payload };
+      const reminderReady = await scheduleBookingReminder(
+        reminderBooking,
+        Boolean(reminderBooking.reminder_enabled)
+      );
+
+      if (reminderBooking.reminder_enabled) {
+        const when = getBookingReminderDate(reminderBooking);
+        if (!reminderReady) {
+          setNotificationMessage(
+            "Booking save ho gayi, lekin reminder schedule nahi hua. Android Notifications + Alarms & reminders check karein."
+          );
+        } else if (when) {
+          setNotificationMessage(
+            `Booking reminder scheduled for ${when.toLocaleString()}.`
+          );
+        }
       }
     }
 
