@@ -40,20 +40,18 @@ async function ensureNativeReminderReady(openExactSettings = false) {
       id: REMINDER_CHANNEL_ID,
       name: "Booking Reminders",
       description: "Shareef Sons event booking reminders",
-      importance: 4,
+      importance: 5,
       visibility: 1,
       vibration: true,
     }).catch(() => {});
 
     if (typeof LocalNotifications.checkExactNotificationSetting === "function") {
-      const exact = await LocalNotifications.checkExactNotificationSetting();
-      if (exact.exact_alarm !== "granted") {
-        if (openExactSettings && typeof LocalNotifications.changeExactNotificationSetting === "function") {
-          await LocalNotifications.changeExactNotificationSetting();
-        }
-        const after = await LocalNotifications.checkExactNotificationSetting().catch(() => exact);
-        return after.exact_alarm === "granted";
+      const exact = await LocalNotifications.checkExactNotificationSetting().catch(() => ({ exact_alarm: "prompt" }));
+      if (exact.exact_alarm !== "granted" && openExactSettings && typeof LocalNotifications.changeExactNotificationSetting === "function") {
+        await LocalNotifications.changeExactNotificationSetting().catch(() => {});
       }
+      // Do not block scheduling here. Android declares both exact-alarm permissions.
+      // The native scheduler will report an actual scheduling error if the OS rejects it.
     }
 
     return true;
