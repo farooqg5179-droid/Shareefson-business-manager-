@@ -63,6 +63,18 @@ jobs:
             --iconBackgroundColor "#ffffff" \
             --iconBackgroundColorDark "#ffffff"
 
+      - name: Prepare notification logo
+        run: |
+          mkdir -p android/app/src/main/res/drawable
+          ICON_SOURCE=$(find android/app/src/main/res -type f \( -name "ic_launcher.png" -o -name "ic_launcher.webp" \) | head -n 1)
+          if [ -z "$ICON_SOURCE" ]; then
+            echo "Launcher icon not found"
+            exit 1
+          fi
+          EXT="${ICON_SOURCE##*.}"
+          cp "$ICON_SOURCE" "android/app/src/main/res/drawable/shareef_sons_notification.${EXT}"
+          echo "Notification logo copied from $ICON_SOURCE"
+
       - name: Sync Capacitor
         run: npx cap sync android
 
