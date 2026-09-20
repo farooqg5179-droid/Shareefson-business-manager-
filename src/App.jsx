@@ -8,7 +8,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { Media } from "@capacitor-community/media";
 import { Printer } from "@capgo/capacitor-printer";
 
-const REMINDER_CHANNEL_ID = "shareef-son-booking-reminders-v2";
+const REMINDER_CHANNEL_ID = "shareef-son-booking-reminders-v3";
 
 function hashToNotificationId(value) {
   const str = String(value || "");
@@ -211,16 +211,25 @@ function money(value) {
   return `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
 }
 
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString();
 }
 
 function getDefaultReminderDate(eventDate) {
   if (!eventDate) return "";
-  const date = new Date(`${eventDate}T12:00:00`);
+  const parts = String(eventDate).split("-");
+  if (parts.length !== 3) return "";
+  const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
   if (Number.isNaN(date.getTime())) return "";
   date.setDate(date.getDate() - 1);
-  return date.toISOString().slice(0, 10);
+  return localDateString(date);
 }
 
 function calcRemaining(total, paid) {
@@ -358,7 +367,7 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState(today().slice(0, 7));
   const [dashboardFromDate, setDashboardFromDate] = useState(() => {
     const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+    return localDateString(new Date(d.getFullYear(), d.getMonth(), 1));
   });
   const [dashboardToDate, setDashboardToDate] = useState(today());
   const [moreOpen, setMoreOpen] = useState(false);
@@ -507,7 +516,7 @@ function App() {
     if (!ready) {
       setNotificationMessage("Please allow Notifications and Alarms & reminders for booking reminders.");
     } else {
-      setNotificationMessage("Notifications and Alarms & reminders are ready.");
+      setNotificationMessage("Notifications ready. Booking reminders will use the selected date and time.");
     }
   }
 
@@ -1544,17 +1553,13 @@ function App() {
       <div className="dashboard">
         {notificationMessage && <div className="notification-banner" onClick={() => setNotificationMessage("")}>🔔 {notificationMessage}<span>×</span></div>}
         <div className="welcome-card">
-          <p>WELCOME BACK</p><h2>{businessName}</h2><span>Manage your complete event business from one place.</span>
+          <p>SHAREEF SONS</p><h2>{businessName}</h2><span>Business overview & daily operations</span>
         </div>
         <div className="dashboard-report-card">
           <div className="dashboard-report-head">
             <div>
               <h2>Business Report</h2>
               <p>From {formatDashboardDate(dashboardFromDate)} to {formatDashboardDate(dashboardToDate)}</p>
-            </div>
-            <div className="report-month-picker">
-              <label>Month</label>
-              <input type="month" value={selectedMonth} onChange={e => setDashboardMonth(e.target.value)} />
             </div>
           </div>
           <div className="report-date-row">
