@@ -356,6 +356,11 @@ function App() {
   const [selectedNote, setSelectedNote] = useState(null);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(today().slice(0, 7));
+  const [dashboardFromDate, setDashboardFromDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  });
+  const [dashboardToDate, setDashboardToDate] = useState(today());
   const [moreOpen, setMoreOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [fileUploading, setFileUploading] = useState(false);
@@ -1424,10 +1429,53 @@ function App() {
 
   const monthPayments = useMemo(() => payments.filter(p => String(p.payment_date || "").slice(0, 7) === selectedMonth), [payments, selectedMonth]);
   const monthExpenses = useMemo(() => expenses.filter(e => String(e.expense_date || "").slice(0, 7) === selectedMonth), [expenses, selectedMonth]);
-  const monthlyIncome = monthPayments.filter(p => p.payment_type === "in").reduce((s, p) => s + Number(p.amount || 0), 0);
-  const monthlyPaymentOut = monthPayments.filter(p => p.payment_type === "out").reduce((s, p) => s + Number(p.amount || 0), 0);
-  const monthlyExpenses = monthExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+
+  const dashboardRangePayments = useMemo(
+    () => payments.filter(p => {
+      const d = String(p.payment_date || "");
+      return d && d >= dashboardFromDate && d <= dashboardToDate;
+    }),
+    [payments, dashboardFromDate, dashboardToDate]
+  );
+  const dashboardRangeExpenses = useMemo(
+    () => expenses.filter(e => {
+      const d = String(e.expense_date || "");
+      return d && d >= dashboardFromDate && d <= dashboardToDate;
+    }),
+    [expenses, dashboardFromDate, dashboardToDate]
+  );
+  const dashboardRangeBookings = useMemo(
+    () => bookings.filter(b => {
+      const d = String(b.event_date || "");
+      return d && d >= dashboardFromDate && d <= dashboardToDate;
+    }),
+    [bookings, dashboardFromDate, dashboardToDate]
+  );
+  const monthlyIncome = dashboardRangePayments.filter(p => p.payment_type === "in").reduce((s, p) => s + Number(p.amount || 0), 0);
+  const monthlyPaymentOut = dashboardRangePayments.filter(p => p.payment_type === "out").reduce((s, p) => s + Number(p.amount || 0), 0);
+  const monthlyExpenses = dashboardRangeExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const monthlyBookingTotal = dashboardRangeBookings.reduce((s, b) => s + Number(b.total_amount || 0), 0);
+  const monthlyBookingCount = dashboardRangeBookings.length;
   const monthlyNet = monthlyIncome - monthlyPaymentOut - monthlyExpenses;
+
+  function formatDashboardDate(value) {
+    if (!value) return "—";
+    const parts = String(value).split("-");
+    return parts.length === 3 ? parts[1] + "." + parts[2] + "." + parts[0] : value;
+  }
+
+  function setDashboardMonth(value) {
+    setSelectedMonth(value);
+    if (!value) return;
+    const parts = value.split("-");
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const first = value + "-01";
+    const lastDay = new Date(year, month, 0).getDate();
+    const last = value + "-" + String(lastDay).padStart(2, "0");
+    setDashboardFromDate(first);
+    setDashboardToDate(last);
+  }
 
   const globalResults = useMemo(() => {
     const q = globalSearch.trim().toLowerCase();
@@ -1490,29 +1538,46 @@ function App() {
   }
 
   function renderHome() {
-    const monthLabel = new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("en-PK", { month: "long", year: "numeric" });
-    const openPayments = type => setSelectedPayment({ __group: type, rows: monthPayments.filter(p => p.payment_type === type) });
+    const rangeLabel = formatDashboardDate(dashboardFromDate) + " → " + formatDashboardDate(dashboardToDate);
+    const openPayments = type => setSelectedPayment({ __group: type, rows: dashboardRangePayments.filter(p => p.payment_type === type) });
     return (
       <div className="dashboard">
         {notificationMessage && <div className="notification-banner" onClick={() => setNotificationMessage("")}>🔔 {notificationMessage}<span>×</span></div>}
         <div className="welcome-card">
           <p>WELCOME BACK</p><h2>{businessName}</h2><span>Manage your complete event business from one place.</span>
         </div>
-        <div className="stats-grid">
-          <button className="stat-card clickable" onClick={() => setCurrentPage("bookings")}><span>Bookings</span><strong>{bookings.length}</strong></button>
-          <button className="stat-card clickable" onClick={() => openPayments("in")}><span>Income</span><strong>{money(monthlyIncome)}</strong></button>
-          <button className="stat-card clickable" onClick={() => { setSelectedPayment({ __group: "out", rows: monthPayments.filter(p => p.payment_type === "out") }); }}><span>Payment Out</span><strong>{money(monthlyPaymentOut)}</strong></button>
-          <button className="stat-card clickable" onClick={() => setSelectedExpense({ __group: "month", rows: monthExpenses })}><span>Expenses</span><strong>{money(monthlyExpenses)}</strong></button>
-        </div>
-        <div className="calculator-card">
-          <div><h2>Monthly Business Calculator</h2><p>{monthLabel}</p></div>
-          <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} />
-          <div className="summary-grid">
-            <button className="summary-card clickable" onClick={() => openPayments("in")}><span>Payment In</span><strong>{money(monthlyIncome)}</strong></button>
-            <button className="summary-card clickable" onClick={() => setSelectedPayment({ __group: "out", rows: monthPayments.filter(p => p.payment_type === "out") })}><span>Payment Out</span><strong>{money(monthlyPaymentOut)}</strong></button>
-            <button className="summary-card clickable" onClick={() => setSelectedExpense({ __group: "month", rows: monthExpenses })}><span>Expenses</span><strong>{money(monthlyExpenses)}</strong></button>
-            <button className="summary-card net-card clickable" onClick={() => setSelectedPayment({ __group: "net", rows: monthPayments, expenseRows: monthExpenses })}><span>Net Balance</span><strong>{money(monthlyNet)}</strong></button>
+        <div className="dashboard-report-card">
+          <div className="dashboard-report-head">
+            <div>
+              <h2>Business Report</h2>
+              <p>From {formatDashboardDate(dashboardFromDate)} to {formatDashboardDate(dashboardToDate)}</p>
+            </div>
+            <div className="report-month-picker">
+              <label>Month</label>
+              <input type="month" value={selectedMonth} onChange={e => setDashboardMonth(e.target.value)} />
+            </div>
           </div>
+          <div className="report-date-row">
+            <div>
+              <label>From</label>
+              <input type="date" value={dashboardFromDate} onChange={e => setDashboardFromDate(e.target.value)} />
+              <small>{formatDashboardDate(dashboardFromDate)}</small>
+            </div>
+            <div className="report-date-arrow">→</div>
+            <div>
+              <label>To</label>
+              <input type="date" value={dashboardToDate} min={dashboardFromDate} onChange={e => setDashboardToDate(e.target.value)} />
+              <small>{formatDashboardDate(dashboardToDate)}</small>
+            </div>
+          </div>
+          <div className="report-summary-grid">
+            <button className="report-summary-card clickable" onClick={() => openPayments("in")}><span>Payment In</span><strong>{money(monthlyIncome)}</strong></button>
+            <button className="report-summary-card clickable" onClick={() => setSelectedPayment({ __group: "out", rows: dashboardRangePayments.filter(p => p.payment_type === "out") })}><span>Payment Out</span><strong>{money(monthlyPaymentOut)}</strong></button>
+            <button className="report-summary-card clickable" onClick={() => setSelectedExpense({ __group: "month", rows: dashboardRangeExpenses })}><span>Expenses</span><strong>{money(monthlyExpenses)}</strong></button>
+            <button className="report-summary-card clickable" onClick={() => setSelectedPayment({ __group: "net", rows: dashboardRangePayments, expenseRows: dashboardRangeExpenses })}><span>Net Balance</span><strong>{money(monthlyNet)}</strong></button>
+            <button className="report-summary-card clickable" onClick={() => setCurrentPage("bookings")}><span>Bookings</span><strong>{monthlyBookingCount}</strong><small>{money(monthlyBookingTotal)} booking total</small></button>
+          </div>
+          <div className="report-range-note"><span>📅 Selected range</span><strong>{rangeLabel}</strong></div>
         </div>
         <div className="section">
           <div className="section-heading"><h2>Quick Actions</h2></div>
