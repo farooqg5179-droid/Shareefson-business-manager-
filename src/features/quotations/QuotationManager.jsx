@@ -78,6 +78,8 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       event_time: "",
       venue: "",
       guests: "",
+      package_name: "",
+      services: "",
       valid_until: "",
       items: [emptyItem()],
       discount: 0,
@@ -118,7 +120,11 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       event_time: form.event_time || null,
       venue: form.venue || null,
       guests: form.guests ? Number(form.guests) : null,
+      package_name: form.package_name || null,
+      services: form.services || null,
       valid_until: form.valid_until || null,
+      customer_phone_snapshot: customerMap[form.customer_id]?.phone || null,
+      customer_whatsapp_snapshot: customerMap[form.customer_id]?.whatsapp_number || null,
       items: form.items.filter(i => i.description.trim()).map(i => ({
         description: i.description.trim(),
         quantity: Number(i.quantity || 1),
@@ -199,6 +205,8 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
           <div className="q-two"><label>Event Type<input value={form.event_type||""} onChange={e=>setForm({...form,event_type:e.target.value})} placeholder="Wedding, Mehndi..." /></label><label>Guests<input type="number" value={form.guests||""} onChange={e=>setForm({...form,guests:e.target.value})} /></label></div>
           <div className="q-two"><label>Event Date<input type="date" value={form.event_date||""} onChange={e=>setForm({...form,event_date:e.target.value})} /></label><label>Event Time<input type="time" value={form.event_time||""} onChange={e=>setForm({...form,event_time:e.target.value})} /></label></div>
           <label>Venue<input value={form.venue||""} onChange={e=>setForm({...form,venue:e.target.value})} placeholder="Venue / Hall / Address" /></label>
+          <label>Package<input value={form.package_name||""} onChange={e=>setForm({...form,package_name:e.target.value})} placeholder="Standard, Premium..." /></label>
+          <label>Services<textarea value={form.services||""} onChange={e=>setForm({...form,services:e.target.value})} rows="2" placeholder="Stage, lights, decor, catering..." /></label>
           <div className="q-two"><label>Valid Until<input type="date" value={form.valid_until||""} onChange={e=>setForm({...form,valid_until:e.target.value})} /></label><label>Status<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></label></div>
         </section>
         <section className="q-card"><h3>Services & Pricing</h3>
