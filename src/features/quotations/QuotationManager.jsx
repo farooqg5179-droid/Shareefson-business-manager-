@@ -41,6 +41,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [form, setForm] = useState(null);
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -53,7 +54,18 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const close = e => {
+      if (!e.target.closest?.(".q-customer-picker")) setCustomerPickerOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, []);
 
   const customerMap = useMemo(
     () => Object.fromEntries(customers.map(c => [c.id, c])),
@@ -73,6 +85,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
     setForm({
       quotation_number: makeQuotationNumber(),
       customer_id: "",
+      customer_name: "",
       event_type: "",
       event_date: "",
       event_time: "",
@@ -94,6 +107,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
     setSelected(q);
     setForm({
       ...q,
+      customer_name: q.customer_name_snapshot || customerMap[q.customer_id]?.name || "",
       items: Array.isArray(q.items) && q.items.length ? q.items : [emptyItem()],
     });
   }
@@ -106,7 +120,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
   }
 
   async function save() {
-    if (!form?.customer_id) return alert("Please select a customer.");
+    if (!form?.customer_name?.trim()) return alert("Please enter or select a customer.");
     if (!form.items.some(i => i.description.trim())) return alert("Add at least one service or item.");
 
     const { subtotal, discount, total } = calculate(form.items, form.discount);
@@ -114,7 +128,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
 
     const payload = {
       quotation_number: form.quotation_number,
-      customer_id: form.customer_id,
+      customer_id: form.customer_id || null,
       event_type: form.event_type || null,
       event_date: form.event_date || null,
       event_time: form.event_time || null,
@@ -123,7 +137,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       package_name: form.package_name || null,
       services: form.services || null,
       valid_until: form.valid_until || null,
-      customer_name_snapshot: customerMap[form.customer_id]?.name || null,
+      customer_name_snapshot: form.customer_name.trim(),
       customer_phone_snapshot: customerMap[form.customer_id]?.phone || null,
       customer_whatsapp_snapshot: customerMap[form.customer_id]?.whatsapp_number || null,
       customer_address_snapshot: customerMap[form.customer_id]?.address || null,
@@ -196,6 +210,30 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
   }
   function escapeAttr(value) { return escapeHtml(value); }
 
+  async function shareQuotation(q) {
+    const customer = customerMap[q.customer_id] || {};
+    const text = [
+      `Quotation: ${q.quotation_number}`,
+      `Customer: ${q.customer_name_snapshot || customer.name || "Customer"}`,
+      `Event: ${q.event_type || "Event"}`,
+      q.event_date ? `Date: ${q.event_date}` : "",
+      q.venue ? `Venue: ${q.venue}` : "",
+      `Total: Rs. ${money(q.total)}`,
+      q.advance_required ? `Advance Required: Rs. ${money(q.advance_required)}` : "",
+      `Status: ${q.status}`,
+    ].filter(Boolean).join("\\n");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `Quotation ${q.quotation_number}`, text });
+      } else {
+        await navigator.clipboard?.writeText(text);
+        alert("Quotation details copied. You can paste them into WhatsApp.");
+      }
+    } catch (e) {
+      if (e?.name !== "AbortError") alert(e?.message || "Could not share quotation.");
+    }
+  }
+
   async function approveAndBook(q) {
     const approvedAt = new Date().toISOString();
     const next = { ...q, status: "Approved", approved_at: approvedAt };
@@ -212,7 +250,7 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       return;
     }
     if (onConvertToBooking) {
-      onConvertToBooking(next, customerMap[q.customer_id]);
+      onConvertToBooking(next, customerMap[q.customer_id] || { id: q.customer_id || "", name: q.customer_name_snapshot || "" });
     } else {
       alert("Quotation approved.");
     }
@@ -222,10 +260,30 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
   if (form) {
     const totals = calculate(form.items, form.discount);
     return <div className="quotation-page">
-      <div className="quotation-top"><button className="q-back" onClick={() => setForm(null)}>← Back</button><div><h2>{selected ? "Edit Quotation" : "New Quotation"}</h2><p>{form.quotation_number}</p></div><button className="q-primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Quotation"}</button></div>
+      <div className="quotation-top"><button className="q-back" onClick={() => setForm(null)}>← Back</button><div><h2>{selected ? "Edit Quotation" : "New Quotation"}</h2><p>{form.quotation_number}</p></div><div /></div>
       <div className="q-form-grid">
         <section className="q-card"><h3>Customer & Event</h3>
-          <label>Customer<select value={form.customer_id} onChange={e => setForm({...form,customer_id:e.target.value})}><option value="">Select customer</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name} {c.phone ? `• ${c.phone}` : ""}</option>)}</select></label>
+          <label>Customer
+            <div className="q-customer-picker">
+              <input value={form.customer_name || ""} onFocus={() => setCustomerPickerOpen(true)} onChange={e => {
+                const value = e.target.value;
+                const match = customers.find(c => String(c.name || "").toLowerCase() === value.trim().toLowerCase());
+                setForm({ ...form, customer_name: value, customer_id: match?.id || "" });
+                setCustomerPickerOpen(true);
+              }} placeholder="Type customer name or select saved customer" autoComplete="off" />
+              {customerPickerOpen && (
+                <div className="q-suggestion-menu">
+                  {customers.filter(c => String(c.name || "").toLowerCase().includes(String(form.customer_name || "").trim().toLowerCase())).slice(0,8).map(c => (
+                    <button type="button" key={c.id} onClick={() => { setForm({ ...form, customer_name: c.name, customer_id: c.id }); setCustomerPickerOpen(false); }}>
+                      <span><b>{c.name}</b><small>{c.phone || c.whatsapp_number || "Saved customer"}</small></span><small>Select</small>
+                    </button>
+                  ))}
+                  {!customers.some(c => String(c.name || "").toLowerCase().includes(String(form.customer_name || "").trim().toLowerCase())) && <div className="q-suggestion-empty">No saved match. You can keep typing a new customer name.</div>}
+                </div>
+              )}
+            </div>
+            <small className="q-hint">Manual name bhi likh sakte hain. Pehle letters type karne par saved customers suggestions ayengi.</small>
+          </label>
           <div className="q-two"><label>Event Type<input value={form.event_type||""} onChange={e=>setForm({...form,event_type:e.target.value})} placeholder="Wedding, Mehndi..." /></label><label>Guests<input type="number" value={form.guests||""} onChange={e=>setForm({...form,guests:e.target.value})} /></label></div>
           <div className="q-two"><label>Event Date<input type="date" value={form.event_date||""} onChange={e=>setForm({...form,event_date:e.target.value})} /></label><label>Event Time<input type="time" value={form.event_time||""} onChange={e=>setForm({...form,event_time:e.target.value})} /></label></div>
           <label>Venue<input value={form.venue||""} onChange={e=>setForm({...form,venue:e.target.value})} placeholder="Venue / Hall / Address" /></label>
@@ -240,13 +298,14 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
         </section>
         <section className="q-card q-full"><h3>Notes & Terms</h3><label>Notes<textarea value={form.notes||""} onChange={e=>setForm({...form,notes:e.target.value})} rows="3" placeholder="Special requirements..." /></label><label>Terms & Conditions<textarea value={form.terms||""} onChange={e=>setForm({...form,terms:e.target.value})} rows="4" /></label></section>
       </div>
+      <div className="q-form-footer"><button className="q-back" onClick={() => setForm(null)}>← Back</button><button className="q-primary q-save-bottom" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Quotation"}</button></div>
     </div>;
   }
 
   return <div className="quotation-page">
-    <div className="quotation-top"><div><h2>Quotations</h2><p>Create professional A4 quotations before confirming a booking.</p></div><button className="q-primary" onClick={newQuotation}>+ New Quotation</button></div>
+    <div className="quotation-top"><button className="q-back" onClick={() => window.history.back()}>← Back</button><div><h2>Quotations</h2><p>Create professional A4 quotations before confirming a booking.</p></div><button className="q-primary" onClick={newQuotation}>+ New Quotation</button></div>
     <div className="q-toolbar"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search quotation or customer..." /><select value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
     {loading ? <div className="q-empty">Loading quotations...</div> : !visible.length ? <div className="q-empty"><b>No quotations yet</b><span>Create your first quotation for a customer.</span></div> :
-      <div className="q-list">{visible.map(q=>{const c=customerMap[q.customer_id]||{};return <article className="q-row" key={q.id}><div className="q-row-main"><strong>{q.quotation_number}</strong><span>{c.name || "Customer"} · {q.event_type || "Event"}</span><small>{q.event_date || "Date TBC"} · Rs. {money(q.total)}</small></div><span className={`q-status q-${q.status.toLowerCase()}`}>{q.status}</span><div className="q-actions"><button onClick={()=>editQuotation(q)}>Edit</button><button onClick={()=>printQuotation(q)}>A4</button>{q.status!=="Approved"&&<button onClick={()=>approveAndBook(q)}>Approve</button>}<button className="danger" onClick={()=>remove(q)}>Delete</button></div></article>})}</div>}
+      <div className="q-list">{visible.map(q=>{const c=customerMap[q.customer_id]||{};return <article className="q-row" key={q.id}><div className="q-row-main"><strong>{q.quotation_number}</strong><span>{c.name || "Customer"} · {q.event_type || "Event"}</span><small>{q.event_date || "Date TBC"} · Rs. {money(q.total)}</small></div><span className={`q-status q-${q.status.toLowerCase()}`}>{q.status}</span><div className="q-actions"><button onClick={()=>editQuotation(q)}>Edit</button><button onClick={()=>shareQuotation(q)}>Share</button><button onClick={()=>printQuotation(q)}>A4</button>{q.status!=="Approved"&&<button onClick={()=>approveAndBook(q)}>Approve</button>}<button className="danger" onClick={()=>remove(q)}>Delete</button></div></article>})}</div>}
   </div>;
 }
