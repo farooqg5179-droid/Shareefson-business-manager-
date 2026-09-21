@@ -968,6 +968,34 @@ function App() {
     setCurrentPage("booking-form");
   }
 
+  function openBookingFromQuotation(quotation, customer) {
+    const customerId = quotation?.customer_id || customer?.id || "";
+    const customerName = quotation?.customer_name_snapshot || customer?.name || "";
+    const total = Number(quotation?.total || 0);
+    const advance = Number(quotation?.advance_required || 0);
+
+    setBookingEditing(null);
+    setBookingForm({
+      ...emptyBooking,
+      customer_id: customerId,
+      customer_name: customerName,
+      event_type: quotation?.event_type || "Wedding",
+      event_date: quotation?.event_date || "",
+      event_time: quotation?.event_time || "",
+      venue: quotation?.venue || "",
+      guests: Number(quotation?.guests || 0),
+      package_name: quotation?.package_name || "",
+      services: quotation?.services || "",
+      total_amount: total,
+      advance_amount: Math.min(advance, total),
+      remaining_amount: calcRemaining(total, advance),
+      status: "Confirmed",
+      notes: quotation?.notes || ""
+    });
+    setBookingMessage("Quotation approved. Booking details loaded — review and save the booking.");
+    setCurrentPage("booking-form");
+  }
+
   function openEditBooking(booking) {
     setBookingEditing(booking);
     setBookingForm({
@@ -2247,7 +2275,7 @@ function App() {
       case "booking-form": return renderBookingForm();
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
-      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} />;
+      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
       case "payments": return renderPayments();
