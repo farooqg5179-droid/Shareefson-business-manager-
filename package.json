@@ -19,6 +19,7 @@
     "lucide-react": "^0.468.0",
 
     "@capacitor/core": "^7.4.0",
+    "@capacitor/app": "^7.0.1",
     "@capacitor/android": "^7.4.0",
     "@capacitor/local-notifications": "^7.0.7",
     "@capacitor/filesystem": "^7.1.8",
