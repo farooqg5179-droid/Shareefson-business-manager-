@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
+import QuotationManager from "./features/quotations/QuotationManager";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
@@ -1590,6 +1591,7 @@ function App() {
             <button onClick={() => { setShowCustomerForm(true); setCurrentPage("customers"); }}>＋ New Customer</button>
             <button onClick={() => openNewBooking()}>＋ New Booking</button>
             <button onClick={() => openNewInvoice()}>＋ Create Invoice</button>
+            <button onClick={() => setCurrentPage("quotations")}>＋ New Quotation</button>
             <button onClick={() => { setPaymentType("in"); setCurrentPage("payments"); }}>＋ Payment In</button>
             <button onClick={() => { setPaymentType("out"); setCurrentPage("payments"); }}>＋ Payment Out</button>
             <button onClick={() => setCurrentPage("notes")}>＋ Add Note</button>
@@ -2245,6 +2247,7 @@ function App() {
       case "booking-form": return renderBookingForm();
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
+      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
       case "payments": return renderPayments();
@@ -2280,6 +2283,7 @@ function App() {
       {moreOpen && <div className="side-menu-backdrop" onClick={() => setMoreOpen(false)}></div>}
       <aside className={`side-menu ${moreOpen ? "open" : ""}`}>
         <div className="side-menu-head"><strong>More</strong><button onClick={() => setMoreOpen(false)}>×</button></div>
+        <button onClick={() => { setCurrentPage("quotations"); setMoreOpen(false); }}>Quotations</button>
         <button onClick={() => { setCurrentPage("payments"); setMoreOpen(false); }}>Payments</button>
         <button onClick={() => { setCurrentPage("expenses"); setMoreOpen(false); }}>Expenses</button>
         <button onClick={() => { setCurrentPage("notes"); setMoreOpen(false); }}>Notes</button>
@@ -2316,7 +2320,7 @@ function pageTitle(page) {
   const map = {
     customers: "Customers", "customer-detail": "Customer Details",
     bookings: "Bookings", "booking-form": "Booking",
-    "booking-detail": "Booking Details", invoices: "Invoices",
+    "booking-detail": "Booking Details", invoices: "Invoices", quotations: "Quotations",
     "invoice-form": "Invoice", "invoice-detail": "Invoice Details",
     payments: "Payments", expenses: "Expenses", notes: "Notes",
     calendar: "Calendar", settings: "Settings"
