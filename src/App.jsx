@@ -5,6 +5,7 @@ import QuotationManager from "./features/quotations/QuotationManager";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { Media } from "@capacitor-community/media";
 import { Printer } from "@capgo/capacitor-printer";
@@ -358,6 +359,50 @@ function App() {
   const [authSaving, setAuthSaving] = useState(false);
 
   const [currentPage, setCurrentPage] = useState("home");
+  const skipHistoryPushRef = useRef(false);
+
+  // Keep every in-app page in browser history so browser/Android back goes
+  // to the previous screen instead of closing the app.
+  useEffect(() => {
+    if (!window.history.state?.ssBusinessManagerPage) {
+      window.history.replaceState({ ssBusinessManagerPage: "home" }, "", window.location.href);
+    }
+
+    const onPopState = event => {
+      skipHistoryPushRef.current = true;
+      setCurrentPage(event.state?.ssBusinessManagerPage || "home");
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (skipHistoryPushRef.current) {
+      skipHistoryPushRef.current = false;
+      return;
+    }
+    if (!window.history.state?.ssBusinessManagerPage ||
+        window.history.state.ssBusinessManagerPage !== currentPage) {
+      window.history.pushState({ ssBusinessManagerPage: currentPage }, "", window.location.href);
+    }
+  }, [currentPage]);
+
+  useEffect(() => {
+    let listener;
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener("backButton", ({ canGoBack }) => {
+        if (window.history.state?.ssBusinessManagerPage && currentPage !== "home" && canGoBack) {
+          window.history.back();
+        } else if (currentPage !== "home") {
+          setCurrentPage("home");
+        }
+        // On the home screen, Android's normal back behavior can close/minimize
+        // the app instead of unexpectedly navigating away inside the UI.
+      }).then(handle => { listener = handle; });
+    }
+    return () => { listener?.remove?.(); };
+  }, [currentPage]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
