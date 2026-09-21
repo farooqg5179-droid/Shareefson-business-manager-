@@ -123,8 +123,17 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       package_name: form.package_name || null,
       services: form.services || null,
       valid_until: form.valid_until || null,
+      customer_name_snapshot: customerMap[form.customer_id]?.name || null,
       customer_phone_snapshot: customerMap[form.customer_id]?.phone || null,
       customer_whatsapp_snapshot: customerMap[form.customer_id]?.whatsapp_number || null,
+      customer_address_snapshot: customerMap[form.customer_id]?.address || null,
+      business_name_snapshot: businessProfile.business_name || null,
+      business_phone_snapshot: businessProfile.phone || null,
+      business_whatsapp_snapshot: businessProfile.whatsapp_number || null,
+      business_address_snapshot: businessProfile.address || null,
+      business_logo_url_snapshot: businessProfile.logo_url || null,
+      business_signature_url_snapshot: businessProfile.signature_url || null,
+      sent_at: form.status === "Sent" ? (selected?.sent_at || new Date().toISOString()) : null,
       items: form.items.filter(i => i.description.trim()).map(i => ({
         description: i.description.trim(),
         quantity: Number(i.quantity || 1),
@@ -188,10 +197,25 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
   function escapeAttr(value) { return escapeHtml(value); }
 
   async function approveAndBook(q) {
-    const next = { ...q, status: "Approved" };
-    await supabase.from("ss_quotations").update({ status: "Approved", updated_at: new Date().toISOString() }).eq("id", q.id);
-    if (onConvertToBooking) onConvertToBooking(next, customerMap[q.customer_id]);
-    else alert("Quotation approved. Connect onConvertToBooking to open the existing Booking form.");
+    const approvedAt = new Date().toISOString();
+    const next = { ...q, status: "Approved", approved_at: approvedAt };
+    const { error } = await supabase
+      .from("ss_quotations")
+      .update({
+        status: "Approved",
+        approved_at: approvedAt,
+        updated_at: approvedAt
+      })
+      .eq("id", q.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    if (onConvertToBooking) {
+      onConvertToBooking(next, customerMap[q.customer_id]);
+    } else {
+      alert("Quotation approved.");
+    }
     load();
   }
 
