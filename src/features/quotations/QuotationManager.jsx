@@ -372,7 +372,8 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
 
   if (form) {
     const totals = calculate(form.items, form.discount);
-    return <div className="quotation-page">
+    return <>
+    <div className="quotation-page">
       <div className="quotation-top"><button className="q-back" onClick={() => setForm(null)}>← Back</button><div><h2>{selected ? "Edit Quotation" : "New Quotation"}</h2><p>{form.quotation_number}</p></div><div /></div>
       <div className="q-form-grid">
         <section className="q-card"><h3>Customer & Event</h3>
@@ -435,4 +436,4 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
         </div>
       </div>
     )}
-  </div>;}
+    </div>;>;}
