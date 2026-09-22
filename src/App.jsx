@@ -2320,7 +2320,7 @@ function App() {
       case "booking-form": return renderBookingForm();
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
-      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} />;
+      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} session={session} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
       case "payments": return renderPayments();
