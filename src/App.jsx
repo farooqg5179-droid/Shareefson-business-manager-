@@ -56,15 +56,19 @@ async function ensureNativeReminderReady(openExactSettings = false) {
       importance: 5,
       visibility: 1,
       vibration: true,
+      sound: "default",
     }).catch(() => {});
 
     if (typeof LocalNotifications.checkExactNotificationSetting === "function") {
-      const exact = await LocalNotifications.checkExactNotificationSetting().catch(() => ({ exact_alarm: "prompt" }));
+      let exact = await LocalNotifications.checkExactNotificationSetting().catch(() => ({ exact_alarm: "prompt" }));
       if (exact.exact_alarm !== "granted" && openExactSettings && typeof LocalNotifications.changeExactNotificationSetting === "function") {
         await LocalNotifications.changeExactNotificationSetting().catch(() => {});
+        exact = await LocalNotifications.checkExactNotificationSetting().catch(() => exact);
       }
-      // Do not block scheduling here. Android declares both exact-alarm permissions.
-      // The native scheduler will report an actual scheduling error if the OS rejects it.
+      if (exact.exact_alarm !== "granted") {
+        console.warn("Exact alarm permission is not granted", exact);
+        return false;
+      }
     }
 
     return true;
@@ -589,8 +593,9 @@ function App() {
           channelId: REMINDER_CHANNEL_ID,
           schedule: {
             at: new Date(Date.now() + 10000),
+            allowWhileIdle: true,
           },
-          largeIcon: "shareef_sons_notification",
+          sound: "default",
           extra: { testNotification: true },
         }],
       });
