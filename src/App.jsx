@@ -1013,6 +1013,39 @@ function App() {
     setCurrentPage("booking-form");
   }
 
+  function openInvoiceFromQuotation(quotation) {
+    const customerId = quotation?.customer_id || "";
+    const customerName = quotation?.customer_name_snapshot || customers.find(c => c.id === customerId)?.name || "";
+    const itemsText = quotation?.itemsText || (Array.isArray(quotation?.items) ? quotation.items
+      .filter(i => i.description)
+      .map(i => `${i.description} x${i.quantity} @ Rs. ${Number(i.rate || 0).toLocaleString("en-PK")} = Rs. ${(Number(i.quantity || 0) * Number(i.rate || 0)).toLocaleString("en-PK")}`)
+      .join("\\n") : "");
+    const total = Number(quotation?.total || 0);
+    const advance = Math.min(Number(quotation?.advance_required || 0), total);
+    setInvoiceEditing(null);
+    setInvoiceForm({
+      ...emptyInvoice,
+      invoice_number: generateInvoiceNumber(),
+      customer_id: customerId,
+      customer_name: customerName,
+      booking_id: "",
+      event_type: quotation?.event_type || "Wedding",
+      event_date: quotation?.event_date || "",
+      event_time: quotation?.event_time || "",
+      venue: quotation?.venue || "",
+      items: itemsText,
+      subtotal: Number(quotation?.subtotal || total),
+      discount: Number(quotation?.discount || 0),
+      total_amount: total,
+      paid_amount: advance,
+      remaining_amount: calcRemaining(total, advance),
+      due_date: quotation?.valid_until || "",
+      notes: quotation?.notes || ""
+    });
+    setInvoiceMessage("Quotation converted to invoice. Review details and save the invoice.");
+    setCurrentPage("invoice-form");
+  }
+
   function openBookingFromQuotation(quotation, customer) {
     const customerId = quotation?.customer_id || customer?.id || "";
     const customerName = quotation?.customer_name_snapshot || customer?.name || "";
@@ -2320,7 +2353,7 @@ function App() {
       case "booking-form": return renderBookingForm();
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
-      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} session={session} />;
+      case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} onConvertToInvoice={openInvoiceFromQuotation} session={session} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
       case "payments": return renderPayments();
