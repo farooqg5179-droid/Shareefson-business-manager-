@@ -413,7 +413,8 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
         <section className="q-card q-full"><h3>Notes & Terms</h3><label>Notes<textarea value={form.notes||""} onChange={e=>setForm({...form,notes:e.target.value})} rows="3" placeholder="Special requirements..." /></label><label>Terms & Conditions<textarea value={form.terms||""} onChange={e=>setForm({...form,terms:e.target.value})} rows="4" /></label></section>
       </div>
       <div className="q-form-footer"><button className="q-back" onClick={() => setForm(null)}>← Back</button><button className="q-primary q-save-bottom" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Quotation"}</button></div>
-    </div>;
+    </div>
+    </>;
   }
 
   return <>
