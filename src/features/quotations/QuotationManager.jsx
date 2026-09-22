@@ -315,7 +315,26 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
         const granted = !permission || permission.photos === "granted" || permission.photos === "limited" || permission.display === "granted";
         if (!granted) throw new Error("Gallery permission allow karein.");
         const written = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache, recursive: true });
-        await Media.savePhoto({ path: written.uri, albumName: "Shareef Sons Quotations" });
+
+        // Android requires an albumIdentifier, not an album name.
+        // Create the album if it does not exist, then resolve its identifier.
+        const albumName = "Shareef Sons Quotations";
+        let albums = await Media.getAlbums().catch(() => ({ albums: [] }));
+        let album = (albums.albums || []).find(a => a.name === albumName);
+        if (!album) {
+          await Media.createAlbum({ name: albumName }).catch(() => {});
+          albums = await Media.getAlbums().catch(() => ({ albums: [] }));
+          album = (albums.albums || []).find(a => a.name === albumName);
+        }
+        if (!album?.identifier) {
+          throw new Error("Quotation album create/identify nahi ho saka. Dobara try karein.");
+        }
+
+        await Media.savePhoto({
+          path: written.uri,
+          albumIdentifier: album.identifier,
+          fileName: fileName.replace(/\\.png$/i, "")
+        });
         alert("Quotation Gallery mein save ho gayi.");
       } else {
         const link = document.createElement("a");
