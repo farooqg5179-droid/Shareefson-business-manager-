@@ -420,20 +420,19 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
     <div className="q-toolbar"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search quotation or customer..." /><select value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
     {loading ? <div className="q-empty">Loading quotations...</div> : !visible.length ? <div className="q-empty"><b>No quotations yet</b><span>Create your first quotation for a customer.</span></div> :
       <div className="q-list">{visible.map(q=>{const c=customerMap[q.customer_id]||{};return <article className="q-row" key={q.id}><div className="q-row-main"><strong>{q.quotation_number}</strong><span>{c.name || "Customer"} · {q.event_type || "Event"}</span><small>{q.event_date || "Date TBC"} · Rs. {money(q.total)}</small></div><span className={`q-status q-${q.status.toLowerCase()}`}>{q.status}</span><div className="q-actions"><button onClick={()=>setViewQuotation(q)}>View</button><button onClick={()=>editQuotation(q)}>Edit</button><button onClick={()=>shareQuotation(q)}>Share</button><button onClick={()=>saveQuotationToGallery(q)} disabled={gallerySaving}>{gallerySaving ? "Saving..." : "Save in Gallery"}</button><button onClick={()=>convertToInvoice(q)}>Convert Invoice</button>{q.status!=="Approved"&&<button onClick={()=>approveAndBook(q)}>Convert Booking</button>}<button className="danger" onClick={()=>remove(q)}>Delete</button></div></article>})}</div>}
-  </div>;
-}
-
-  {viewQuotation && (
-    <div className="q-view-backdrop" onClick={() => setViewQuotation(null)}>
-      <div className="q-view-card" onClick={e => e.stopPropagation()}>
-        <div className="q-view-head"><div><b>View Quotation</b><span>{viewQuotation.quotation_number}</span></div><button onClick={() => setViewQuotation(null)}>×</button></div>
-        <div className="q-view-sheet" dangerouslySetInnerHTML={{ __html: quotationMarkup(viewQuotation) }} />
-        <div className="q-view-actions">
-          <button className="q-back" onClick={() => setViewQuotation(null)}>Close</button>
-          <button className="q-primary" onClick={() => shareQuotation(viewQuotation)}>Share</button>
-          <button className="q-primary" onClick={() => saveQuotationToGallery(viewQuotation)}>Save in Gallery</button>
-          <button className="q-primary" onClick={() => convertToInvoice(viewQuotation)}>Convert Invoice</button>
+  </div>
+    {viewQuotation && (
+      <div className="q-view-backdrop" onClick={() => setViewQuotation(null)}>
+        <div className="q-view-card" onClick={e => e.stopPropagation()}>
+          <div className="q-view-head"><div><b>View Quotation</b><span>{viewQuotation.quotation_number}</span></div><button onClick={() => setViewQuotation(null)}>×</button></div>
+          <div className="q-view-sheet" dangerouslySetInnerHTML={{ __html: quotationMarkup(viewQuotation) }} />
+          <div className="q-view-actions">
+            <button className="q-back" onClick={() => setViewQuotation(null)}>Close</button>
+            <button className="q-primary" onClick={() => shareQuotation(viewQuotation)}>Share</button>
+            <button className="q-primary" onClick={() => saveQuotationToGallery(viewQuotation)}>Save in Gallery</button>
+            <button className="q-primary" onClick={() => convertToInvoice(viewQuotation)}>Convert Invoice</button>
+          </div>
         </div>
       </div>
-    </div>
-  )}
+    )}
+  </div>;}
