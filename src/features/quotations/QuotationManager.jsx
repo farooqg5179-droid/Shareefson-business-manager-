@@ -32,7 +32,7 @@ function calculate(items, discount) {
   return { subtotal, discount: safeDiscount, total: subtotal - safeDiscount };
 }
 
-export default function QuotationManager({ businessProfile = {}, onConvertToBooking }) {
+export default function QuotationManager({ businessProfile = {}, onConvertToBooking, session }) {
   const [customers, setCustomers] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -126,9 +126,25 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
     const { subtotal, discount, total } = calculate(form.items, form.discount);
     setSaving(true);
 
+    let customerId = form.customer_id || null;
+    if (!customerId) {
+      const { data: newCustomer, error: customerError } = await supabase
+        .from("ss_customers")
+        .insert({ user_id: session?.user?.id, name: form.customer_name.trim() })
+        .select()
+        .single();
+      if (customerError) {
+        setSaving(false);
+        return alert(customerError.message);
+      }
+      customerId = newCustomer.id;
+      setCustomers(prev => [...prev, newCustomer]);
+    }
+
     const payload = {
       quotation_number: form.quotation_number,
-      customer_id: form.customer_id || null,
+      user_id: session?.user?.id,
+      customer_id: customerId,
       event_type: form.event_type || null,
       event_date: form.event_date || null,
       event_time: form.event_time || null,
@@ -138,9 +154,9 @@ export default function QuotationManager({ businessProfile = {}, onConvertToBook
       services: form.services || null,
       valid_until: form.valid_until || null,
       customer_name_snapshot: form.customer_name.trim(),
-      customer_phone_snapshot: customerMap[form.customer_id]?.phone || null,
-      customer_whatsapp_snapshot: customerMap[form.customer_id]?.whatsapp_number || null,
-      customer_address_snapshot: customerMap[form.customer_id]?.address || null,
+      customer_phone_snapshot: customerMap[customerId]?.phone || null,
+      customer_whatsapp_snapshot: customerMap[customerId]?.whatsapp_number || null,
+      customer_address_snapshot: customerMap[customerId]?.address || null,
       business_name_snapshot: businessProfile.business_name || null,
       business_phone_snapshot: businessProfile.phone || null,
       business_whatsapp_snapshot: businessProfile.whatsapp_number || null,
