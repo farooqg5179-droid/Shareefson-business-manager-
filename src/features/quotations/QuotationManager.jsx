@@ -37,7 +37,7 @@ function calculate(items, discount) {
   return { subtotal, discount: safeDiscount, total: subtotal - safeDiscount };
 }
 
-export default function QuotationManager({ businessProfile = {}, onConvertToBooking, session }) {
+export default function QuotationManager({ businessProfile = {}, onConvertToBooking, onConvertToInvoice, session }) {
   const [customers, setCustomers] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [selected, setSelected] = useState(null);
