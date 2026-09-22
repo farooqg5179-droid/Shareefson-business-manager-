@@ -1,0 +1,105 @@
+.ai-command-center {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.ai-command-header h2 {
+  margin: 8px 0 6px;
+  font-size: 24px;
+}
+
+.ai-command-header p {
+  margin: 0 0 18px;
+  color: #667085;
+}
+
+.ai-command-badge {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #111;
+  color: #d4af37;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.ai-command-center textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 14px;
+  border: 1px solid #d9dde5;
+  border-radius: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.ai-command-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.ai-command-actions button {
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 16px;
+  background: #111;
+  color: #fff;
+  font-weight: 700;
+}
+
+.ai-command-actions button.confirm {
+  background: #d4af37;
+  color: #111;
+}
+
+.ai-command-actions button:disabled {
+  opacity: .55;
+}
+
+.ai-command-error {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.ai-command-result {
+  margin-top: 18px;
+  padding: 15px;
+  border-radius: 14px;
+  background: #f8f9fb;
+}
+
+.ai-result-title {
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.ai-confirm-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-left: 4px solid #d4af37;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+}
+
+.ai-command-result pre {
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+  font-size: 12px;
+}
