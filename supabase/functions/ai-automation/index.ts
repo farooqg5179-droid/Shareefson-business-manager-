@@ -19,6 +19,24 @@ function cleanText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizePlan(plan: any) {
+  const allowed = new Set([
+    "search_customer", "search_booking", "prepare_invoice", "create_invoice",
+    "prepare_quotation", "create_quotation", "daily_briefing",
+    "customer_followup", "financial_analysis", "smart_notification", "whatsapp_message",
+  ]);
+  const action = allowed.has(plan?.action) ? plan.action : "unknown";
+  return {
+    title: cleanText(plan?.title) || "AI Automation",
+    summary: cleanText(plan?.summary),
+    action,
+    requires_confirmation: Boolean(plan?.requires_confirmation),
+    confirmation_message: cleanText(plan?.confirmation_message),
+    steps: Array.isArray(plan?.steps) ? plan.steps.map((x: unknown) => cleanText(x)).filter(Boolean).slice(0, 20) : [],
+    parameters: plan?.parameters && typeof plan.parameters === "object" ? plan.parameters : {},
+  };
+}
+
 async function groqPlan(message: string, context: unknown) {
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Supabase.");
@@ -27,19 +45,19 @@ async function groqPlan(message: string, context: unknown) {
     "You are the AI automation planner for Shareef Sons Business Manager.",
     "Understand English, Urdu, Roman Urdu and mixed language.",
     "Return ONLY valid JSON.",
-    "Allowed actions: search_customer, search_booking, prepare_invoice, create_invoice, prepare_quotation, daily_briefing, customer_followup, financial_analysis, smart_notification, whatsapp_message.",
-    "Never claim that an action was executed unless the server actually executed it.",
-    "Any write, financial, notification, or WhatsApp send action must require confirmation first.",
-    "Keep the plan concise and use Pakistani rupees when amounts are mentioned.",
+    "Allowed actions: search_customer, search_booking, prepare_invoice, create_invoice, prepare_quotation, create_quotation, daily_briefing, customer_followup, financial_analysis, smart_notification, whatsapp_message.",
+    "Search/read-only actions may execute immediately.",
+    "Any create, update, delete, financial, notification, follow-up or WhatsApp action requires admin confirmation.",
+    "Never claim an action was executed unless the server actually executed it.",
+    "For create_invoice/create_quotation, put complete database-ready fields in parameters.",
+    "For customer_followup, smart_notification and whatsapp_message, prepare the message and target but do not claim delivery.",
+    "Keep plans concise. Use Pakistani rupees for amounts.",
     "JSON shape: {title,summary,action,requires_confirmation,confirmation_message,steps,parameters}.",
   ].join("\n");
 
   const response = await fetch(GROQ_URL, {
     method: "POST",
-    headers: {
-      "Authorization": "Bearer " + apiKey,
-      "Content-Type": "application/json",
-    },
+    headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile",
       temperature: 0.1,
@@ -51,30 +69,25 @@ async function groqPlan(message: string, context: unknown) {
     }),
   });
 
-  if (!response.ok) {
-    throw new Error("Groq request failed: " + await response.text());
-  }
-
+  if (!response.ok) throw new Error("Groq request failed: " + await response.text());
   const payload = await response.json();
-  const content = payload?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Groq returned an empty plan.");
-
-  return JSON.parse(content);
+  const raw = payload?.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Groq returned an empty plan.");
+  return normalizePlan(JSON.parse(raw));
 }
 
 async function getContext(supabase: any, userId: string) {
-  const [customers, bookings, invoices, quotations] = await Promise.all([
+  const [customers, bookings, invoices, quotations, payments, expenses] = await Promise.all([
     supabase.from("ss_customers").select("id,name,phone,whatsapp_number,address,notes,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
     supabase.from("ss_bookings").select("id,customer_id,customer_name,event_type,event_date,event_time,venue,guests,total_amount,advance_amount,remaining_amount,status,reminder_enabled,reminder_date,reminder_time,notes").eq("user_id", userId).order("event_date", { ascending: true }).limit(100),
     supabase.from("ss_invoices").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
     supabase.from("ss_quotations").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
+    supabase.from("ss_payments").select("*").eq("user_id", userId).order("payment_date", { ascending: false }).limit(200),
+    supabase.from("ss_expenses").select("*").eq("user_id", userId).order("expense_date", { ascending: false }).limit(200),
   ]);
-
   return {
-    customers: customers.data || [],
-    bookings: bookings.data || [],
-    invoices: invoices.data || [],
-    quotations: quotations.data || [],
+    customers: customers.data || [], bookings: bookings.data || [], invoices: invoices.data || [],
+    quotations: quotations.data || [], payments: payments.data || [], expenses: expenses.data || [],
   };
 }
 
@@ -87,81 +100,108 @@ function findCustomer(context: any, parameters: any) {
 }
 
 function findBooking(context: any, parameters: any) {
-  const query = cleanText(parameters?.customer_name || parameters?.name || parameters?.booking_id).toLowerCase();
+  const query = cleanText(parameters?.customer_name || parameters?.name || parameters?.booking_id || parameters?.event_type).toLowerCase();
   return (context.bookings || []).filter((b: any) => {
     if (!query) return true;
     return [b.id, b.customer_name, b.event_type, b.venue].some((v: any) => cleanText(v).toLowerCase().includes(query));
   }).slice(0, 10);
 }
 
+function sum(rows: any[], field: string) {
+  return rows.reduce((total, row) => total + Number(row?.[field] || 0), 0);
+}
+
 async function executePlan(supabase: any, userId: string, plan: any, context: any) {
+  const p = plan.parameters || {};
+
   switch (plan.action) {
     case "search_customer":
-      return { action: plan.action, data: findCustomer(context, plan.parameters) };
+      return { action: plan.action, executed: true, data: findCustomer(context, p) };
 
     case "search_booking":
-      return { action: plan.action, data: findBooking(context, plan.parameters) };
+      return { action: plan.action, executed: true, data: findBooking(context, p) };
 
-    case "daily_briefing":
+    case "daily_briefing": {
+      const today = new Date().toISOString().slice(0, 10);
       return {
-        action: plan.action,
+        action: plan.action, executed: true,
         data: {
-          upcomingBookings: (context.bookings || []).filter((b: any) => b.event_date).slice(0, 10),
+          today,
+          upcomingBookings: (context.bookings || []).filter((b: any) => b.event_date && b.event_date >= today).slice(0, 10),
           unpaidInvoices: (context.invoices || []).filter((i: any) => Number(i.remaining_amount || 0) > 0).slice(0, 20),
+          paymentsIn: sum(context.payments || [], "amount"),
+          expenses: sum(context.expenses || [], "amount"),
         },
       };
+    }
 
     case "financial_analysis":
       return {
-        action: plan.action,
+        action: plan.action, executed: true,
         data: {
-          invoiceTotal: (context.invoices || []).reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0),
-          invoicePaid: (context.invoices || []).reduce((s: number, x: any) => s + Number(x.paid_amount || 0), 0),
-          invoiceRemaining: (context.invoices || []).reduce((s: number, x: any) => s + Number(x.remaining_amount || 0), 0),
+          invoiceTotal: sum(context.invoices || [], "total_amount"),
+          invoicePaid: sum(context.invoices || [], "paid_amount"),
+          invoiceRemaining: sum(context.invoices || [], "remaining_amount"),
+          paymentsIn: (context.payments || []).filter((x: any) => x.payment_type === "in").reduce((s: number, x: any) => s + Number(x.amount || 0), 0),
+          paymentsOut: (context.payments || []).filter((x: any) => x.payment_type === "out").reduce((s: number, x: any) => s + Number(x.amount || 0), 0),
+          expenses: sum(context.expenses || [], "amount"),
         },
       };
 
     case "prepare_invoice":
-      return {
-        action: plan.action,
-        data: {
-          customer: findCustomer(context, plan.parameters)[0] || null,
-          booking: findBooking(context, plan.parameters)[0] || null,
-          draft: plan.parameters || {},
-        },
-      };
+      return { action: plan.action, executed: true, data: {
+        customer: findCustomer(context, p)[0] || null,
+        booking: findBooking(context, p)[0] || null,
+        draft: p,
+      }};
 
     case "prepare_quotation":
-      return {
-        action: plan.action,
-        data: { customer: findCustomer(context, plan.parameters)[0] || null, draft: plan.parameters || {} },
-      };
+      return { action: plan.action, executed: true, data: {
+        customer: findCustomer(context, p)[0] || null, draft: p,
+      }};
 
     case "create_invoice": {
-      const p = plan.parameters || {};
+      const total = Number(p.total_amount || 0);
+      const paid = Number(p.paid_amount || 0);
       const draft = {
         user_id: userId,
-        customer_id: p.customer_id || null,
-        customer_name: cleanText(p.customer_name) || null,
-        booking_id: p.booking_id || null,
+        customer_id: p.customer_id || findCustomer(context, p)[0]?.id || null,
+        customer_name: cleanText(p.customer_name) || findCustomer(context, p)[0]?.name || null,
+        booking_id: p.booking_id || findBooking(context, p)[0]?.id || null,
         invoice_number: cleanText(p.invoice_number) || ("AI-" + Date.now()),
         invoice_date: cleanText(p.invoice_date) || new Date().toISOString().slice(0, 10),
         event_type: cleanText(p.event_type) || "Event",
         event_date: cleanText(p.event_date) || null,
         event_time: cleanText(p.event_time),
         venue: cleanText(p.venue),
-        items: cleanText(p.items),
-        subtotal: Number(p.subtotal || 0),
+        items: typeof p.items === "string" ? p.items : JSON.stringify(p.items || []),
+        subtotal: Number(p.subtotal || total),
         discount: Number(p.discount || 0),
-        total_amount: Number(p.total_amount || 0),
-        paid_amount: Number(p.paid_amount || 0),
-        remaining_amount: Math.max(Number(p.total_amount || 0) - Number(p.paid_amount || 0), 0),
+        total_amount: total,
+        paid_amount: paid,
+        remaining_amount: Math.max(total - paid, 0),
         due_date: cleanText(p.due_date) || null,
         notes: cleanText(p.notes),
       };
-
       const { data, error } = await supabase.from("ss_invoices").insert(draft).select().single();
-      if (error) throw new Error(error.message);
+      if (error) throw new Error("Invoice creation failed: " + error.message);
+      return { action: plan.action, executed: true, data };
+    }
+
+    case "create_quotation": {
+      const row: any = {
+        user_id: userId,
+        customer_id: p.customer_id || findCustomer(context, p)[0]?.id || null,
+        customer_name: cleanText(p.customer_name) || findCustomer(context, p)[0]?.name || null,
+        package_name: cleanText(p.package_name),
+        services: typeof p.services === "string" ? p.services : JSON.stringify(p.services || []),
+        total_amount: Number(p.total_amount || 0),
+        notes: cleanText(p.notes),
+        status: cleanText(p.status) || "Draft",
+      };
+      if (p.valid_until) row.valid_until = cleanText(p.valid_until);
+      const { data, error } = await supabase.from("ss_quotations").insert(row).select().single();
+      if (error) throw new Error("Quotation creation failed: " + error.message);
       return { action: plan.action, executed: true, data };
     }
 
@@ -169,13 +209,17 @@ async function executePlan(supabase: any, userId: string, plan: any, context: an
     case "smart_notification":
     case "whatsapp_message":
       return {
-        action: plan.action,
-        executed: false,
-        data: { message: "This action is planned but external delivery is not enabled yet.", parameters: plan.parameters || {} },
+        action: plan.action, executed: false,
+        data: {
+          delivery_status: "prepared",
+          message: cleanText(p.message || p.text || plan.summary),
+          customer: findCustomer(context, p)[0] || null,
+          parameters: p,
+        },
       };
 
     default:
-      return { action: plan.action || "unknown", executed: false, data: context };
+      return { action: "unknown", executed: false, data: {} };
   }
 }
 
@@ -190,40 +234,86 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceKey) return json({ error: "Supabase function secrets are missing." }, 500);
 
-    const authClient = createClient(supabaseUrl, serviceKey);
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await authClient.auth.getUser(token);
+    const db = createClient(supabaseUrl, serviceKey);
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: userData, error: userError } = await db.auth.getUser(token);
     if (userError || !userData.user) return json({ error: "Invalid session." }, 401);
 
     const body = await req.json();
     const message = cleanText(body?.message);
     const confirmed = Boolean(body?.confirmed);
-    if (!message) return json({ error: "message is required." }, 400);
+    const confirmationLogId = cleanText(body?.confirmation_log_id);
 
-    const context = await getContext(authClient, userData.user.id);
-    const plan = await groqPlan(message, context);
+    if (!message && !confirmationLogId) return json({ error: "message is required." }, 400);
 
-    const writeActions = new Set(["create_invoice", "customer_followup", "smart_notification", "whatsapp_message"]);
-    const needsConfirmation = writeActions.has(plan.action);
+    // Confirmation always executes the exact previously stored plan.
+    if (confirmed) {
+      if (!confirmationLogId) return json({ error: "confirmation_log_id is required." }, 400);
 
-    if (needsConfirmation && !confirmed) {
+      const { data: log, error: logError } = await db
+        .from("ss_ai_automation_logs")
+        .select("*")
+        .eq("id", confirmationLogId)
+        .eq("user_id", userData.user.id)
+        .single();
+
+      if (logError || !log) return json({ error: "Automation request was not found." }, 404);
+      if (log.status !== "awaiting_confirmation") return json({ error: "This automation is already processed or expired." }, 409);
+
+      const result = await executePlan(db, userData.user.id, normalizePlan(log.plan), await getContext(db, userData.user.id));
+      const finalStatus = result.executed ? "executed" : "prepared";
+
+      await db.from("ss_ai_automation_logs").update({
+        status: finalStatus,
+        result: result.data || {},
+      }).eq("id", log.id).eq("user_id", userData.user.id);
+
       return json({
-        ...plan,
-        requires_confirmation: true,
-        confirmation_message: plan.confirmation_message || "Please confirm before this action is executed.",
-        executed: false,
+        log_id: log.id,
+        title: log.plan?.title || "AI Automation",
+        summary: log.plan?.summary || "",
+        action: log.action,
+        requires_confirmation: false,
+        executed: Boolean(result.executed),
+        steps: log.plan?.steps || [],
+        data: result.data,
       });
     }
 
-    const result = await executePlan(authClient, userData.user.id, plan, context);
-    return json({
-      title: plan.title || "AI Automation",
-      summary: plan.summary || "",
+    const context = await getContext(db, userData.user.id);
+    const plan = await groqPlan(message, context);
+    const writeActions = new Set([
+      "create_invoice", "create_quotation", "customer_followup",
+      "smart_notification", "whatsapp_message"
+    ]);
+    const needsConfirmation = writeActions.has(plan.action);
+
+    const status = needsConfirmation ? "awaiting_confirmation" : "executed";
+    const initialResult = needsConfirmation ? {} : (await executePlan(db, userData.user.id, plan, context)).data || {};
+
+    const { data: log, error: logError } = await db.from("ss_ai_automation_logs").insert({
+      user_id: userData.user.id,
+      request_text: message,
       action: plan.action,
-      requires_confirmation: false,
-      executed: Boolean(result.executed),
-      steps: plan.steps || [],
-      data: result.data,
+      status,
+      plan,
+      result: initialResult,
+    }).select("id").single();
+
+    if (logError) throw new Error("Could not save AI automation log: " + logError.message);
+
+    return json({
+      log_id: log.id,
+      title: plan.title,
+      summary: plan.summary,
+      action: plan.action,
+      requires_confirmation: needsConfirmation,
+      confirmation_message: needsConfirmation
+        ? (plan.confirmation_message || "Please confirm before this action is executed.")
+        : "",
+      executed: !needsConfirmation,
+      steps: plan.steps,
+      data: initialResult,
     });
   } catch (error) {
     console.error(error);
