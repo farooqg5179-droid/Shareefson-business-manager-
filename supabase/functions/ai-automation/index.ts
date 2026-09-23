@@ -189,15 +189,29 @@ async function executePlan(supabase: any, userId: string, plan: any, context: an
     }
 
     case "create_quotation": {
+      const customer = findCustomer(context, p)[0] || null;
+      if (!p.customer_id && !customer?.id) throw new Error("A saved customer is required before creating a quotation.");
+      const total = Number(p.total || p.total_amount || 0);
       const row: any = {
         user_id: userId,
-        customer_id: p.customer_id || findCustomer(context, p)[0]?.id || null,
-        customer_name: cleanText(p.customer_name) || findCustomer(context, p)[0]?.name || null,
-        package_name: cleanText(p.package_name),
-        services: typeof p.services === "string" ? p.services : JSON.stringify(p.services || []),
-        total_amount: Number(p.total_amount || 0),
-        notes: cleanText(p.notes),
+        quotation_number: cleanText(p.quotation_number) || ("AI-Q-" + Date.now()),
+        customer_id: p.customer_id || customer.id,
+        booking_id: p.booking_id || null,
+        event_type: cleanText(p.event_type) || null,
+        event_date: cleanText(p.event_date) || null,
+        event_time: cleanText(p.event_time) || null,
+        venue: cleanText(p.venue) || null,
+        guests: Number(p.guests || 0),
+        items: Array.isArray(p.items) ? p.items : [],
+        subtotal: Number(p.subtotal || total),
+        discount: Number(p.discount || 0),
+        total,
+        advance_required: Number(p.advance_required || p.advance_amount || 0),
         status: cleanText(p.status) || "Draft",
+        notes: cleanText(p.notes) || null,
+        terms: cleanText(p.terms) || null,
+        package_name: cleanText(p.package_name) || null,
+        services: typeof p.services === "string" ? p.services : JSON.stringify(p.services || []),
       };
       if (p.valid_until) row.valid_until = cleanText(p.valid_until);
       const { data, error } = await supabase.from("ss_quotations").insert(row).select().single();
