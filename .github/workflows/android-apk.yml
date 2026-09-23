@@ -43,6 +43,7 @@ jobs:
           permissions = [
               "android.permission.POST_NOTIFICATIONS",
               "android.permission.SCHEDULE_EXACT_ALARM",
+              "android.permission.RECORD_AUDIO",
           ]
           insert = ""
           for perm in permissions:
