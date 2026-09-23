@@ -81,7 +81,7 @@ async function groqPlan(message: string, context: unknown) {
     method: "POST",
     headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile",
+      model: Deno.env.get("GROQ_MODEL") || "openai/gpt-oss-120b",
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
