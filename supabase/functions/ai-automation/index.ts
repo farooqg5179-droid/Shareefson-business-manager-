@@ -37,6 +37,28 @@ function normalizePlan(plan: any) {
   };
 }
 
+async function groqTranscribe(audio: File) {
+  const apiKey = Deno.env.get("GROQ_API_KEY");
+  if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Supabase.");
+
+  const form = new FormData();
+  form.append("file", audio, audio.name || "voice.webm");
+  form.append("model", "whisper-large-v3-turbo");
+  form.append("response_format", "json");
+
+  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + apiKey },
+    body: form,
+  });
+
+  if (!response.ok) throw new Error("Voice transcription failed: " + await response.text());
+  const payload = await response.json();
+  const text = cleanText(payload?.text);
+  if (!text) throw new Error("Voice transcription returned empty text.");
+  return text;
+}
+
 async function groqPlan(message: string, context: unknown) {
   const apiKey = Deno.env.get("GROQ_API_KEY");
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Supabase.");
@@ -253,8 +275,26 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await db.auth.getUser(token);
     if (userError || !userData.user) return json({ error: "Invalid session." }, 401);
 
-    const body = await req.json();
-    const message = cleanText(body?.message);
+    const contentType = req.headers.get("content-type") || "";
+    let body: any = {};
+    let voiceTranscript = "";
+
+    if (contentType.toLowerCase().includes("multipart/form-data")) {
+      const form = await req.formData();
+      const audio = form.get("audio");
+      if (audio instanceof File) {
+        voiceTranscript = await groqTranscribe(audio);
+      }
+      body = {
+        message: cleanText(form.get("message")),
+        confirmed: String(form.get("confirmed") || "false") === "true",
+        confirmation_log_id: cleanText(form.get("confirmation_log_id")),
+      };
+    } else {
+      body = await req.json();
+    }
+
+    const message = cleanText(body?.message) || voiceTranscript;
     const confirmed = Boolean(body?.confirmed);
     const confirmationLogId = cleanText(body?.confirmation_log_id);
 
@@ -291,6 +331,7 @@ Deno.serve(async (req) => {
         executed: Boolean(result.executed),
         steps: log.plan?.steps || [],
         data: result.data,
+        voice_transcript: voiceTranscript || null,
       });
     }
 
@@ -328,6 +369,7 @@ Deno.serve(async (req) => {
       executed: !needsConfirmation,
       steps: plan.steps,
       data: initialResult,
+      voice_transcript: voiceTranscript || null,
     });
   } catch (error) {
     console.error(error);
