@@ -103,3 +103,45 @@
   color: #fff;
   font-size: 12px;
 }
+
+
+.voice-button,
+.voice-recording {
+  min-width: 150px;
+}
+
+.voice-button {
+  background: #d4af37 !important;
+  color: #111 !important;
+}
+
+.voice-recording {
+  background: #b42318 !important;
+  color: #fff !important;
+  animation: aiVoicePulse 1.2s infinite;
+}
+
+.ai-voice-status {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff8df;
+  border: 1px solid #ead38a;
+  font-weight: 700;
+}
+
+.ai-transcript {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+
+.ai-result-actions {
+  margin-top: 12px;
+}
+
+@keyframes aiVoicePulse {
+  50% { transform: scale(1.02); }
+}
