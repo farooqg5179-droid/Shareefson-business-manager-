@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
 import QuotationManager from "./features/quotations/QuotationManager";
+import AICommandCenter from "./features/ai-automation/AICommandCenter";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
@@ -2358,6 +2359,7 @@ function App() {
       case "booking-form": return renderBookingForm();
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
+      case "ai-automation": return <AICommandCenter />;
       case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} onConvertToInvoice={openInvoiceFromQuotation} session={session} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
@@ -2394,6 +2396,7 @@ function App() {
       {moreOpen && <div className="side-menu-backdrop" onClick={() => setMoreOpen(false)}></div>}
       <aside className={`side-menu ${moreOpen ? "open" : ""}`}>
         <div className="side-menu-head"><strong>More</strong><button onClick={() => setMoreOpen(false)}>×</button></div>
+        <button onClick={() => { setCurrentPage("ai-automation"); setMoreOpen(false); }}>🤖 AI Automation</button>
         <button onClick={() => { setCurrentPage("quotations"); setMoreOpen(false); }}>Quotations</button>
         <button onClick={() => { setCurrentPage("payments"); setMoreOpen(false); }}>Payments</button>
         <button onClick={() => { setCurrentPage("expenses"); setMoreOpen(false); }}>Expenses</button>
