@@ -1,379 +1,546 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
+const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
+const MODEL = "openai/gpt-oss-120b";
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
+const WRITE_ACTIONS = new Set([
+  "create_invoice",
+  "create_quotation",
+  "customer_followup",
+  "smart_notification",
+  "whatsapp_message",
+]);
+
+const ACTIONS = [
+  "search_customer",
+  "search_booking",
+  "prepare_invoice",
+  "create_invoice",
+  "prepare_quotation",
+  "create_quotation",
+  "daily_briefing",
+  "customer_followup",
+  "financial_analysis",
+  "smart_notification",
+  "whatsapp_message",
+];
+
+function reply(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...CORS, "Content-Type": "application/json" },
   });
 }
 
-function cleanText(value: unknown) {
+function str(value: unknown) {
   return String(value ?? "").trim();
 }
 
-function normalizePlan(plan: any) {
-  const allowed = new Set([
-    "search_customer", "search_booking", "prepare_invoice", "create_invoice",
-    "prepare_quotation", "create_quotation", "daily_briefing",
-    "customer_followup", "financial_analysis", "smart_notification", "whatsapp_message",
-  ]);
-  const action = allowed.has(plan?.action) ? plan.action : "unknown";
+function planClean(value: any) {
+  const action = ACTIONS.includes(value?.action) ? value.action : "unknown";
+
   return {
-    title: cleanText(plan?.title) || "AI Automation",
-    summary: cleanText(plan?.summary),
+    title: str(value?.title) || "AI Automation",
+    summary: str(value?.summary),
     action,
-    requires_confirmation: Boolean(plan?.requires_confirmation),
-    confirmation_message: cleanText(plan?.confirmation_message),
-    steps: Array.isArray(plan?.steps) ? plan.steps.map((x: unknown) => cleanText(x)).filter(Boolean).slice(0, 20) : [],
-    parameters: plan?.parameters && typeof plan.parameters === "object" ? plan.parameters : {},
+    confirmation_message: str(value?.confirmation_message),
+    steps: Array.isArray(value?.steps)
+      ? value.steps.map(str).filter(Boolean).slice(0, 10)
+      : [],
+    parameters:
+      value?.parameters && typeof value.parameters === "object"
+        ? value.parameters
+        : {},
   };
 }
 
-async function groqTranscribe(audio: File) {
-  const apiKey = Deno.env.get("GROQ_API_KEY");
-  if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Supabase.");
+async function transcribe(file: File) {
+  const key = Deno.env.get("GROQ_API_KEY");
+  if (!key) throw new Error("GROQ_API_KEY is missing.");
 
   const form = new FormData();
-  form.append("file", audio, audio.name || "voice.webm");
+  form.append("file", file, file.name || "voice.webm");
   form.append("model", "whisper-large-v3-turbo");
   form.append("response_format", "json");
 
-  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + apiKey },
-    body: form,
-  });
+  const r = await fetch(
+    "https://api.groq.com/openai/v1/audio/transcriptions",
+    {
+      method: "POST",
+      headers: { Authorization: "Bearer " + key },
+      body: form,
+    },
+  );
 
-  if (!response.ok) throw new Error("Voice transcription failed: " + await response.text());
-  const payload = await response.json();
-  const text = cleanText(payload?.text);
-  if (!text) throw new Error("Voice transcription returned empty text.");
+  if (!r.ok) throw new Error("Voice transcription failed: " + await r.text());
+
+  const data = await r.json();
+  const text = str(data?.text);
+  if (!text) throw new Error("Voice transcript is empty.");
   return text;
 }
 
-async function groqPlan(message: string, context: unknown) {
-  const apiKey = Deno.env.get("GROQ_API_KEY");
-  if (!apiKey) throw new Error("GROQ_API_KEY is not configured in Supabase.");
+async function askAI(message: string, context: unknown) {
+  const key = Deno.env.get("GROQ_API_KEY");
+  if (!key) throw new Error("GROQ_API_KEY is missing.");
 
-  const system = [
-    "You are the AI automation planner for Shareef Sons Business Manager.",
-    "Understand English, Urdu, Roman Urdu and mixed language.",
-    "Return ONLY valid JSON.",
-    "Allowed actions: search_customer, search_booking, prepare_invoice, create_invoice, prepare_quotation, create_quotation, daily_briefing, customer_followup, financial_analysis, smart_notification, whatsapp_message.",
-    "Search/read-only actions may execute immediately.",
-    "Any create, update, delete, financial, notification, follow-up or WhatsApp action requires admin confirmation.",
-    "Never claim an action was executed unless the server actually executed it.",
-    "For create_invoice/create_quotation, put complete database-ready fields in parameters.",
-    "For customer_followup, smart_notification and whatsapp_message, prepare the message and target but do not claim delivery.",
-    "Keep plans concise. Use Pakistani rupees for amounts.",
-    "JSON shape: {title,summary,action,requires_confirmation,confirmation_message,steps,parameters}.",
-  ].join("\n");
+  const system = `
+You are Shareef Sons Business Manager AI.
+Understand English, Urdu, Roman Urdu and mixed language.
+Return ONLY JSON.
+Allowed actions: ${ACTIONS.join(", ")}.
+Search, prepare, briefing and analysis are read-only.
+Create, follow-up, notification and WhatsApp actions require admin confirmation.
+Never say something was created or sent unless the server actually did it.
+For create actions put required values inside parameters.
+JSON:
+{"title":"","summary":"","action":"","confirmation_message":"","steps":[],"parameters":{}}
+`;
 
-  const response = await fetch(GROQ_URL, {
+  const r = await fetch(GROQ_URL, {
     method: "POST",
-    headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
+    headers: {
+      Authorization: "Bearer " + key,
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
-      model: GROQ_CHAT_MODEL,
+      model: MODEL,
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
-        { role: "user", content: JSON.stringify({ message, context }) },
+        {
+          role: "user",
+          content: JSON.stringify({ message, context }),
+        },
       ],
     }),
   });
 
-  if (!response.ok) throw new Error("Groq request failed: " + await response.text());
-  const payload = await response.json();
-  const raw = payload?.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("Groq returned an empty plan.");
-  return normalizePlan(JSON.parse(raw));
+  if (!r.ok) throw new Error("Groq request failed: " + await r.text());
+
+  const data = await r.json();
+  const raw = data?.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Groq returned no plan.");
+
+  try {
+    return planClean(JSON.parse(raw));
+  } catch {
+    throw new Error("Groq returned invalid JSON.");
+  }
 }
 
-async function getContext(supabase: any, userId: string) {
-  const [customers, bookings, invoices, quotations, payments, expenses] = await Promise.all([
-    supabase.from("ss_customers").select("id,name,phone,whatsapp_number,address,notes,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
-    supabase.from("ss_bookings").select("id,customer_id,customer_name,event_type,event_date,event_time,venue,guests,total_amount,advance_amount,remaining_amount,status,reminder_enabled,reminder_date,reminder_time,notes").eq("user_id", userId).order("event_date", { ascending: true }).limit(100),
-    supabase.from("ss_invoices").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
-    supabase.from("ss_quotations").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(100),
-    supabase.from("ss_payments").select("*").eq("user_id", userId).order("payment_date", { ascending: false }).limit(200),
-    supabase.from("ss_expenses").select("*").eq("user_id", userId).order("expense_date", { ascending: false }).limit(200),
-  ]);
+async function loadContext(db: any, userId: string) {
+  const [customers, bookings, invoices, quotations, payments, expenses] =
+    await Promise.all([
+      db.from("ss_customers")
+        .select("id,name,phone,whatsapp_number,address,notes")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+
+      db.from("ss_bookings")
+        .select("id,customer_id,customer_name,event_type,event_date,event_time,venue,guests,total_amount,advance_amount,remaining_amount,status,notes")
+        .eq("user_id", userId)
+        .order("event_date", { ascending: true })
+        .limit(100),
+
+      db.from("ss_invoices")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+
+      db.from("ss_quotations")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+
+      db.from("ss_payments")
+        .select("*")
+        .eq("user_id", userId)
+        .order("payment_date", { ascending: false })
+        .limit(200),
+
+      db.from("ss_expenses")
+        .select("*")
+        .eq("user_id", userId)
+        .order("expense_date", { ascending: false })
+        .limit(200),
+    ]);
+
   return {
-    customers: customers.data || [], bookings: bookings.data || [], invoices: invoices.data || [],
-    quotations: quotations.data || [], payments: payments.data || [], expenses: expenses.data || [],
+    customers: customers.data || [],
+    bookings: bookings.data || [],
+    invoices: invoices.data || [],
+    quotations: quotations.data || [],
+    payments: payments.data || [],
+    expenses: expenses.data || [],
   };
 }
 
-function findCustomer(context: any, parameters: any) {
-  const query = cleanText(parameters?.customer_name || parameters?.name || parameters?.phone).toLowerCase();
-  if (!query) return [];
-  return (context.customers || []).filter((c: any) =>
-    [c.name, c.phone, c.whatsapp_number].some((v: any) => cleanText(v).toLowerCase().includes(query))
-  ).slice(0, 10);
+function findCustomer(ctx: any, p: any) {
+  const q = str(
+    p?.customer_name || p?.name || p?.phone || p?.whatsapp_number,
+  ).toLowerCase();
+
+  if (!q) return [];
+
+  return ctx.customers
+    .filter((c: any) =>
+      [c.name, c.phone, c.whatsapp_number].some((v) =>
+        str(v).toLowerCase().includes(q),
+      ),
+    )
+    .slice(0, 10);
 }
 
-function findBooking(context: any, parameters: any) {
-  const query = cleanText(parameters?.customer_name || parameters?.name || parameters?.booking_id || parameters?.event_type).toLowerCase();
-  return (context.bookings || []).filter((b: any) => {
-    if (!query) return true;
-    return [b.id, b.customer_name, b.event_type, b.venue].some((v: any) => cleanText(v).toLowerCase().includes(query));
-  }).slice(0, 10);
+function findBooking(ctx: any, p: any) {
+  const q = str(
+    p?.customer_name || p?.name || p?.booking_id || p?.event_type,
+  ).toLowerCase();
+
+  return ctx.bookings
+    .filter((b: any) => {
+      if (!q) return true;
+      return [b.id, b.customer_name, b.event_type, b.venue].some((v) =>
+        str(v).toLowerCase().includes(q),
+      );
+    })
+    .slice(0, 10);
 }
 
-function sum(rows: any[], field: string) {
-  return rows.reduce((total, row) => total + Number(row?.[field] || 0), 0);
+function total(rows: any[], field: string) {
+  return rows.reduce((n, row) => n + Number(row?.[field] || 0), 0);
 }
 
-async function executePlan(supabase: any, userId: string, plan: any, context: any) {
+async function execute(db: any, userId: string, plan: any, ctx: any) {
   const p = plan.parameters || {};
 
   switch (plan.action) {
     case "search_customer":
-      return { action: plan.action, executed: true, data: findCustomer(context, p) };
+      return { executed: true, data: findCustomer(ctx, p) };
 
     case "search_booking":
-      return { action: plan.action, executed: true, data: findBooking(context, p) };
+      return { executed: true, data: findBooking(ctx, p) };
+
+    case "prepare_invoice":
+      return {
+        executed: true,
+        data: {
+          customer: findCustomer(ctx, p)[0] || null,
+          booking: findBooking(ctx, p)[0] || null,
+          draft: p,
+        },
+      };
+
+    case "prepare_quotation":
+      return {
+        executed: true,
+        data: {
+          customer: findCustomer(ctx, p)[0] || null,
+          draft: p,
+        },
+      };
 
     case "daily_briefing": {
       const today = new Date().toISOString().slice(0, 10);
       return {
-        action: plan.action, executed: true,
+        executed: true,
         data: {
           today,
-          upcomingBookings: (context.bookings || []).filter((b: any) => b.event_date && b.event_date >= today).slice(0, 10),
-          unpaidInvoices: (context.invoices || []).filter((i: any) => Number(i.remaining_amount || 0) > 0).slice(0, 20),
-          paymentsIn: sum(context.payments || [], "amount"),
-          expenses: sum(context.expenses || [], "amount"),
+          upcomingBookings: ctx.bookings
+            .filter((b: any) => b.event_date >= today)
+            .slice(0, 10),
+          unpaidInvoices: ctx.invoices
+            .filter((i: any) => Number(i.remaining_amount || 0) > 0)
+            .slice(0, 20),
+          paymentsIn: ctx.payments
+            .filter((p: any) => p.payment_type === "in")
+            .reduce((n: number, p: any) => n + Number(p.amount || 0), 0),
+          expenses: total(ctx.expenses, "amount"),
         },
       };
     }
 
     case "financial_analysis":
       return {
-        action: plan.action, executed: true,
+        executed: true,
         data: {
-          invoiceTotal: sum(context.invoices || [], "total_amount"),
-          invoicePaid: sum(context.invoices || [], "paid_amount"),
-          invoiceRemaining: sum(context.invoices || [], "remaining_amount"),
-          paymentsIn: (context.payments || []).filter((x: any) => x.payment_type === "in").reduce((s: number, x: any) => s + Number(x.amount || 0), 0),
-          paymentsOut: (context.payments || []).filter((x: any) => x.payment_type === "out").reduce((s: number, x: any) => s + Number(x.amount || 0), 0),
-          expenses: sum(context.expenses || [], "amount"),
+          invoiceTotal: total(ctx.invoices, "total_amount"),
+          invoicePaid: total(ctx.invoices, "paid_amount"),
+          invoiceRemaining: total(ctx.invoices, "remaining_amount"),
+          paymentsIn: ctx.payments
+            .filter((p: any) => p.payment_type === "in")
+            .reduce((n: number, p: any) => n + Number(p.amount || 0), 0),
+          paymentsOut: ctx.payments
+            .filter((p: any) => p.payment_type === "out")
+            .reduce((n: number, p: any) => n + Number(p.amount || 0), 0),
+          expenses: total(ctx.expenses, "amount"),
         },
       };
 
-    case "prepare_invoice":
-      return { action: plan.action, executed: true, data: {
-        customer: findCustomer(context, p)[0] || null,
-        booking: findBooking(context, p)[0] || null,
-        draft: p,
-      }};
-
-    case "prepare_quotation":
-      return { action: plan.action, executed: true, data: {
-        customer: findCustomer(context, p)[0] || null, draft: p,
-      }};
-
     case "create_invoice": {
-      const total = Number(p.total_amount || 0);
-      const paid = Number(p.paid_amount || 0);
-      const draft = {
+      const customer = findCustomer(ctx, p)[0];
+      const booking = findBooking(ctx, p)[0];
+      const amount = Number(p.total_amount || p.total || 0);
+      const paid = Number(p.paid_amount || p.advance_amount || 0);
+
+      const row = {
         user_id: userId,
-        customer_id: p.customer_id || findCustomer(context, p)[0]?.id || null,
-        customer_name: cleanText(p.customer_name) || findCustomer(context, p)[0]?.name || null,
-        booking_id: p.booking_id || findBooking(context, p)[0]?.id || null,
-        invoice_number: cleanText(p.invoice_number) || ("AI-" + Date.now()),
-        invoice_date: cleanText(p.invoice_date) || new Date().toISOString().slice(0, 10),
-        event_type: cleanText(p.event_type) || "Event",
-        event_date: cleanText(p.event_date) || null,
-        event_time: cleanText(p.event_time),
-        venue: cleanText(p.venue),
-        items: typeof p.items === "string" ? p.items : JSON.stringify(p.items || []),
-        subtotal: Number(p.subtotal || total),
+        customer_id: p.customer_id || customer?.id || null,
+        customer_name: str(p.customer_name) || customer?.name || null,
+        booking_id: p.booking_id || booking?.id || null,
+        invoice_number: str(p.invoice_number) || "AI-" + Date.now(),
+        invoice_date:
+          str(p.invoice_date) || new Date().toISOString().slice(0, 10),
+        event_type: str(p.event_type) || booking?.event_type || "Event",
+        event_date: str(p.event_date) || booking?.event_date || null,
+        event_time: str(p.event_time) || booking?.event_time || null,
+        venue: str(p.venue) || booking?.venue || null,
+        items: Array.isArray(p.items) ? p.items : [],
+        subtotal: Number(p.subtotal || amount),
         discount: Number(p.discount || 0),
-        total_amount: total,
+        total_amount: amount,
         paid_amount: paid,
-        remaining_amount: Math.max(total - paid, 0),
-        due_date: cleanText(p.due_date) || null,
-        notes: cleanText(p.notes),
+        remaining_amount: Math.max(amount - paid, 0),
+        due_date: str(p.due_date) || null,
+        notes: str(p.notes) || null,
       };
-      const { data, error } = await supabase.from("ss_invoices").insert(draft).select().single();
+
+      const { data, error } = await db
+        .from("ss_invoices")
+        .insert(row)
+        .select()
+        .single();
+
       if (error) throw new Error("Invoice creation failed: " + error.message);
-      return { action: plan.action, executed: true, data };
+      return { executed: true, data };
     }
 
     case "create_quotation": {
-      const customer = findCustomer(context, p)[0] || null;
-      if (!p.customer_id && !customer?.id) throw new Error("A saved customer is required before creating a quotation.");
-      const total = Number(p.total || p.total_amount || 0);
+      const customer = findCustomer(ctx, p)[0];
+
+      if (!p.customer_id && !customer?.id) {
+        throw new Error("Saved customer is required for quotation.");
+      }
+
+      const amount = Number(p.total || p.total_amount || 0);
+
       const row: any = {
         user_id: userId,
-        quotation_number: cleanText(p.quotation_number) || ("AI-Q-" + Date.now()),
+        quotation_number: str(p.quotation_number) || "AI-Q-" + Date.now(),
         customer_id: p.customer_id || customer.id,
         booking_id: p.booking_id || null,
-        event_type: cleanText(p.event_type) || null,
-        event_date: cleanText(p.event_date) || null,
-        event_time: cleanText(p.event_time) || null,
-        venue: cleanText(p.venue) || null,
+        event_type: str(p.event_type) || null,
+        event_date: str(p.event_date) || null,
+        event_time: str(p.event_time) || null,
+        venue: str(p.venue) || null,
         guests: Number(p.guests || 0),
+        valid_until: str(p.valid_until) || null,
         items: Array.isArray(p.items) ? p.items : [],
-        subtotal: Number(p.subtotal || total),
+        subtotal: Number(p.subtotal || amount),
         discount: Number(p.discount || 0),
-        total,
-        advance_required: Number(p.advance_required || p.advance_amount || 0),
-        status: cleanText(p.status) || "Draft",
-        notes: cleanText(p.notes) || null,
-        terms: cleanText(p.terms) || null,
-        package_name: cleanText(p.package_name) || null,
-        services: typeof p.services === "string" ? p.services : JSON.stringify(p.services || []),
+        total: amount,
+        advance_required: Number(
+          p.advance_required || p.advance_amount || 0,
+        ),
+        status: str(p.status) || "Draft",
+        notes: str(p.notes) || null,
+        terms: str(p.terms) || null,
       };
-      if (p.valid_until) row.valid_until = cleanText(p.valid_until);
-      const { data, error } = await supabase.from("ss_quotations").insert(row).select().single();
-      if (error) throw new Error("Quotation creation failed: " + error.message);
-      return { action: plan.action, executed: true, data };
+
+      const { data, error } = await db
+        .from("ss_quotations")
+        .insert(row)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error("Quotation creation failed: " + error.message);
+      }
+
+      return { executed: true, data };
     }
 
     case "customer_followup":
     case "smart_notification":
     case "whatsapp_message":
       return {
-        action: plan.action, executed: false,
+        executed: false,
         data: {
-          delivery_status: "prepared",
-          message: cleanText(p.message || p.text || plan.summary),
-          customer: findCustomer(context, p)[0] || null,
+          delivery_status: "prepared_only",
+          message: str(p.message || p.text || plan.summary),
+          customer: findCustomer(ctx, p)[0] || null,
           parameters: p,
         },
       };
 
     default:
-      return { action: "unknown", executed: false, data: {} };
+      throw new Error("Unsupported AI action.");
   }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS });
+  }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "Authorization required." }, 401);
+    const auth = req.headers.get("Authorization");
+    if (!auth) return reply({ error: "Authorization required." }, 401);
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const url = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) return json({ error: "Supabase function secrets are missing." }, 500);
+    if (!url || !serviceKey) {
+      return reply({ error: "Supabase secrets are missing." }, 500);
+    }
 
-    const db = createClient(supabaseUrl, serviceKey);
-    const token = authHeader.replace(/^Bearer\s+/i, "");
-    const { data: userData, error: userError } = await db.auth.getUser(token);
-    if (userError || !userData.user) return json({ error: "Invalid session." }, 401);
+    const db = createClient(url, serviceKey);
+    const token = auth.replace(/^Bearer\s+/i, "");
+    const { data: authData, error: authError } = await db.auth.getUser(token);
 
-    const contentType = req.headers.get("content-type") || "";
+    if (authError || !authData.user) {
+      return reply({ error: "Invalid session." }, 401);
+    }
+
     let body: any = {};
-    let voiceTranscript = "";
+    let transcript = "";
 
-    if (contentType.toLowerCase().includes("multipart/form-data")) {
+    const type = req.headers.get("content-type") || "";
+
+    if (type.includes("multipart/form-data")) {
       const form = await req.formData();
       const audio = form.get("audio");
+
       if (audio instanceof File) {
-        voiceTranscript = await groqTranscribe(audio);
+        transcript = await transcribe(audio);
       }
+
       body = {
-        message: cleanText(form.get("message")),
-        confirmed: String(form.get("confirmed") || "false") === "true",
-        confirmation_log_id: cleanText(form.get("confirmation_log_id")),
+        message: str(form.get("message")),
+        confirmed: str(form.get("confirmed")) === "true",
+        confirmation_log_id: str(form.get("confirmation_log_id")),
       };
     } else {
       body = await req.json();
     }
 
-    const message = cleanText(body?.message) || voiceTranscript;
-    const confirmed = Boolean(body?.confirmed);
-    const confirmationLogId = cleanText(body?.confirmation_log_id);
+    const message = str(body.message) || transcript;
+    const confirmed = Boolean(body.confirmed);
+    const logId = str(body.confirmation_log_id);
 
-    if (!message && !confirmationLogId) return json({ error: "message is required." }, 400);
+    if (!message && !logId) {
+      return reply({ error: "message is required." }, 400);
+    }
 
-    // Confirmation always executes the exact previously stored plan.
     if (confirmed) {
-      if (!confirmationLogId) return json({ error: "confirmation_log_id is required." }, 400);
+      if (!logId) {
+        return reply({ error: "confirmation_log_id is required." }, 400);
+      }
 
-      const { data: log, error: logError } = await db
+      const { data: log, error } = await db
         .from("ss_ai_automation_logs")
         .select("*")
-        .eq("id", confirmationLogId)
-        .eq("user_id", userData.user.id)
+        .eq("id", logId)
+        .eq("user_id", authData.user.id)
         .single();
 
-      if (logError || !log) return json({ error: "Automation request was not found." }, 404);
-      if (log.status !== "awaiting_confirmation") return json({ error: "This automation is already processed or expired." }, 409);
+      if (error || !log) {
+        return reply({ error: "Automation request not found." }, 404);
+      }
 
-      const result = await executePlan(db, userData.user.id, normalizePlan(log.plan), await getContext(db, userData.user.id));
-      const finalStatus = result.executed ? "executed" : "prepared";
+      if (log.status !== "awaiting_confirmation") {
+        return reply({ error: "This request is already processed." }, 409);
+      }
 
-      await db.from("ss_ai_automation_logs").update({
-        status: finalStatus,
-        result: result.data || {},
-      }).eq("id", log.id).eq("user_id", userData.user.id);
+      const ctx = await loadContext(db, authData.user.id);
+      const result = await execute(
+        db,
+        authData.user.id,
+        planClean(log.plan),
+        ctx,
+      );
 
-      return json({
+      await db
+        .from("ss_ai_automation_logs")
+        .update({
+          status: result.executed ? "executed" : "prepared",
+          result: result.data || {},
+        })
+        .eq("id", log.id)
+        .eq("user_id", authData.user.id);
+
+      return reply({
         log_id: log.id,
         title: log.plan?.title || "AI Automation",
         summary: log.plan?.summary || "",
         action: log.action,
         requires_confirmation: false,
-        executed: Boolean(result.executed),
-        steps: log.plan?.steps || [],
+        executed: result.executed,
         data: result.data,
-        voice_transcript: voiceTranscript || null,
+        voice_transcript: transcript || null,
       });
     }
 
-    const context = await getContext(db, userData.user.id);
-    const plan = await groqPlan(message, context);
-    const writeActions = new Set([
-      "create_invoice", "create_quotation", "customer_followup",
-      "smart_notification", "whatsapp_message"
-    ]);
-    const needsConfirmation = writeActions.has(plan.action);
+    const ctx = await loadContext(db, authData.user.id);
+    const plan = await askAI(message, ctx);
+    const needsConfirmation = WRITE_ACTIONS.has(plan.action);
 
-    const status = needsConfirmation ? "awaiting_confirmation" : "executed";
-    const initialResult = needsConfirmation ? {} : (await executePlan(db, userData.user.id, plan, context)).data || {};
+    let resultData = {};
 
-    const { data: log, error: logError } = await db.from("ss_ai_automation_logs").insert({
-      user_id: userData.user.id,
-      request_text: message,
-      action: plan.action,
-      status,
-      plan,
-      result: initialResult,
-    }).select("id").single();
+    if (!needsConfirmation) {
+      resultData = (await execute(
+        db,
+        authData.user.id,
+        plan,
+        ctx,
+      )).data || {};
+    }
 
-    if (logError) throw new Error("Could not save AI automation log: " + logError.message);
+    const { data: log, error: logError } = await db
+      .from("ss_ai_automation_logs")
+      .insert({
+        user_id: authData.user.id,
+        request_text: message,
+        action: plan.action,
+        status: needsConfirmation ? "awaiting_confirmation" : "executed",
+        plan,
+        result: resultData,
+      })
+      .select("id")
+      .single();
 
-    return json({
+    if (logError) {
+      throw new Error("Could not save AI log: " + logError.message);
+    }
+
+    return reply({
       log_id: log.id,
       title: plan.title,
       summary: plan.summary,
       action: plan.action,
       requires_confirmation: needsConfirmation,
       confirmation_message: needsConfirmation
-        ? (plan.confirmation_message || "Please confirm before this action is executed.")
+        ? plan.confirmation_message || "Confirm this action to continue."
         : "",
       executed: !needsConfirmation,
       steps: plan.steps,
-      data: initialResult,
-      voice_transcript: voiceTranscript || null,
+      data: resultData,
+      voice_transcript: transcript || null,
     });
   } catch (error) {
     console.error(error);
-    return json({ error: error?.message || "AI automation failed." }, 500);
+    return reply(
+      { error: error instanceof Error ? error.message : "AI automation failed." },
+      500,
+    );
   }
 });
