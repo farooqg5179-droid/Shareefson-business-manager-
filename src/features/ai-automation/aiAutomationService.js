@@ -1,7 +1,7 @@
 import { supabase } from "../../lib/supabase";
 import { makeAutomationRequest } from "./types";
 
-const FUNCTION_NAME = "ai-automation";
+const FUNCTION_NAME = "ai-automation-v2";
 
 export async function runAIAutomation(message, confirmed = false, confirmationLogId = null, audioBlob = null) {
   const request = makeAutomationRequest(message, confirmed, confirmationLogId);
