@@ -5,9 +5,15 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_KEY || "";
 
 export const supabaseConfigError =
   !supabaseUrl || !supabaseKey
-    ? "Supabase configuration is missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_KEY to GitHub Actions Secrets, then rebuild the APK."
+    ? "Supabase configuration is missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_KEY to your Vercel/GitHub environment variables, then rebuild the app."
     : "";
 
 export const supabase = supabaseConfigError
   ? null
-  : createClient(supabaseUrl, supabaseKey);
+  : createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
