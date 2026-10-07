@@ -36,14 +36,54 @@ export async function runAIAutomation(
     body = form;
   }
 
+  // Explicitly attach the current user's access token.
+  // This is important for protected Edge Functions (verify_jwt=true),
+  // especially inside the Android Capacitor WebView.
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw new Error(
+      sessionError.message || "Unable to read the current login session.",
+    );
+  }
+
+  if (!session?.access_token) {
+    throw new Error("Permission denied: please sign in again.");
+  }
+
   const { data, error } = await supabase.functions.invoke(
     FUNCTION_NAME,
-    { body },
+    {
+      body,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    },
   );
 
   if (error) {
+    let details = "";
+    try {
+      if (error.context instanceof Response) {
+        const responseText = await error.context.text();
+        if (responseText) {
+          try {
+            const parsed = JSON.parse(responseText);
+            details = parsed?.error ? `: ${parsed.error}` : `: ${responseText}`;
+          } catch {
+            details = `: ${responseText}`;
+          }
+        }
+      }
+    } catch {
+      // Keep the normal Supabase error when the response body is unavailable.
+    }
+
     throw new Error(
-      error.message || "AI Assistant Supabase request failed.",
+      `${error.message || "AI Assistant Supabase request failed."}${details}`,
     );
   }
 
