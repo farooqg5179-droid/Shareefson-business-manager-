@@ -10,12 +10,19 @@ function prettyData(data) {
 }
 
 function speakText(text) {
-  if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(String(text));
-  utterance.lang = /[\u0600-\u06ff]/.test(String(text)) ? "ur-PK" : "en-PK";
-  utterance.rate = 0.95;
-  window.speechSynthesis.speak(utterance);
+  if (!text || typeof window === "undefined") return false;
+  const synth = window.speechSynthesis;
+  if (!synth || typeof window.SpeechSynthesisUtterance === "undefined") return false;
+  try {
+    synth.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(String(text));
+    utterance.lang = /[\u0600-\u06ff]/.test(String(text)) ? "ur-PK" : "en-PK";
+    utterance.rate = 0.95;
+    synth.speak(utterance);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default function AICommandCenter() {
@@ -117,6 +124,19 @@ export default function AICommandCenter() {
     }
   }
 
+  function readResult() {
+    const textToRead = result?.summary || result?.title;
+    if (!textToRead) {
+      setError("Abhi parhne ke liye koi AI result mojood nahi.");
+      return;
+    }
+    if (!speakText(textToRead)) {
+      setError("Is Android WebView mein voice reading available nahi. Result neeche text mein mojood hai.");
+    } else {
+      setError("");
+    }
+  }
+
   const needsConfirmation = Boolean(result?.requires_confirmation);
   const rows = prettyData(result?.data);
 
@@ -171,8 +191,8 @@ export default function AICommandCenter() {
           )}
 
           <div className="ai-result-actions">
-            <button type="button" className="secondary-button" onClick={() => speakText(result.summary || result.title)}>
-              🔊 Read Result
+            <button type="button" className="secondary-button ai-read-result-button" onClick={readResult}>
+              🔊 Read Automation Results
             </button>
           </div>
 
