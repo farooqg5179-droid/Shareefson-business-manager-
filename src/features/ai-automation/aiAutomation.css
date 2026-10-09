@@ -145,3 +145,18 @@
 @keyframes aiVoicePulse {
   50% { transform: scale(1.02); }
 }
+
+
+/* Keep the result reader tappable inside Android WebView. */
+.ai-result-actions,
+.ai-read-result-button {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.ai-read-result-button {
+  min-height: 44px;
+  -webkit-tap-highlight-color: rgba(212, 175, 55, 0.25);
+}
