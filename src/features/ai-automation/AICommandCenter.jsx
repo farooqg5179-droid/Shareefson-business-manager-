@@ -147,11 +147,13 @@ export default function AICommandCenter() {
       stepsText,
       dataText,
     ].filter(value => typeof value === "string" && value.trim()).join(". ");
-    if (!textToRead) {
-      setError("AI response aaya hai lekin us mein parhne wala text nahi mila. Neeche result ya Supabase logs check karein.");
+    const fallbackText = result ? JSON.stringify(result, null, 2) : "";
+    const finalText = textToRead || fallbackText;
+    if (!finalText) {
+      setError("AI response khali hai. Dobara command chala kar dekhein.");
       return;
     }
-    if (!speakText(textToRead)) {
+    if (!speakText(finalText)) {
       setError("Is Android WebView mein voice reading available nahi. Result neeche text mein mojood hai.");
     } else {
       setError("");
@@ -250,6 +252,9 @@ export default function AICommandCenter() {
           )}
 
           {result.data && !rows && <pre>{JSON.stringify(result.data, null, 2)}</pre>}
+          {!result.summary && !result.title && !result.message && !result.steps?.length && !result.data && (
+            <pre className="ai-raw-result">{JSON.stringify(result, null, 2)}</pre>
+          )}
         </div>
       )}
     </section>
