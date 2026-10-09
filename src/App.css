@@ -558,3 +558,6 @@ body,.app{background:var(--page)}
   .actions-grid{grid-template-columns:repeat(2,1fr)!important;gap:7px!important}
   .actions-grid button{min-height:45px!important;font-size:10px!important}
 }
+
+
+.settings-signout-card{margin:0 0 16px;padding:18px;border:1px solid #e5b7b1;border-radius:16px;background:#fffafa}.settings-signout-card h2{margin:0 0 6px}.settings-signout-card p{margin:0 0 14px;color:#666;font-size:13px;line-height:1.5}.settings-signout-button{min-height:44px;padding:11px 18px;font-weight:800}
