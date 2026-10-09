@@ -2298,6 +2298,16 @@ function App() {
     ];
     return <div className="dashboard">
       <PageHeader title="Settings" action={<button className="secondary-button" onClick={() => setCurrentPage("home")}>← Back</button>} />
+      <div className="form-card settings-signout-card">
+        <h2>Account & Security</h2>
+        <p>Sign out of your account on this device.</p>
+        <button type="button" className="danger-button settings-signout-button" onClick={async () => {
+          if (!window.confirm("Are you sure you want to sign out?")) return;
+          const { error } = await supabase.auth.signOut();
+          if (error) window.alert(error.message || "Sign out failed. Please try again.");
+        }}>Sign Out</button>
+      </div>
+
       <form className="form-card profile-form" onSubmit={saveBusinessProfile}>
         <h2>Business Profile</h2>
         <label>Business Name</label><input value={businessName} onChange={e => setBusinessName(e.target.value)} />
