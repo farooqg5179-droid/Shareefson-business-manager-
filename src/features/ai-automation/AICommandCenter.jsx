@@ -125,9 +125,30 @@ export default function AICommandCenter() {
   }
 
   function readResult() {
-    const textToRead = result?.summary || result?.title;
+    const dataText = result?.data
+      ? (Array.isArray(result.data) ? result.data : [result.data])
+          .map((item, index) => {
+            if (item && typeof item === "object") {
+              const parts = Object.entries(item)
+                .filter(([, value]) => value !== null && value !== undefined && value !== "")
+                .map(([key, value]) => `${key.replaceAll("_", " ")}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
+              return `Result ${index + 1}. ${parts.join(". ")}`;
+            }
+            return String(item);
+          }).join(". ")
+      : "";
+    const stepsText = Array.isArray(result?.steps) ? result.steps.join(". ") : "";
+    const textToRead = [
+      result?.summary,
+      result?.title,
+      result?.message,
+      result?.confirmation_message,
+      result?.action ? `Action: ${result.action}` : "",
+      stepsText,
+      dataText,
+    ].filter(value => typeof value === "string" && value.trim()).join(". ");
     if (!textToRead) {
-      setError("Abhi parhne ke liye koi AI result mojood nahi.");
+      setError("AI response aaya hai lekin us mein parhne wala text nahi mila. Neeche result ya Supabase logs check karein.");
       return;
     }
     if (!speakText(textToRead)) {
