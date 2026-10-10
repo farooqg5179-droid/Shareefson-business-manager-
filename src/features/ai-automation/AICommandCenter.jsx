@@ -139,9 +139,22 @@ export default function AICommandCenter() {
     setConfirming(true);
     setError("");
     try {
-      const executed = await confirmAIAutomation(result.log_id);
+      const response = await confirmAIAutomation(result.log_id);
+      const executed = response?.result
+        ? {
+            ...response,
+            title: response.title || response.plan?.title || "AI Automation Result",
+            summary: response.summary || response.result?.message || "",
+            message: response.message || response.result?.message || "",
+            action: response.action || response.plan?.action || "",
+            steps: response.steps || response.plan?.steps || [],
+            data: response.data ?? response.result?.data ?? response.plan?.data ?? null,
+            requires_confirmation: Boolean(response.requires_confirmation),
+            confirmation_message: response.confirmation_message || response.plan?.confirmation_message || "",
+          }
+        : response;
       setResult(executed);
-      speakText(executed.summary || "Action completed.");
+      speakText(executed.summary || executed.message || "Action completed.");
     } catch (e) {
       setError(e.message || "AI automation execution failed.");
     } finally {
