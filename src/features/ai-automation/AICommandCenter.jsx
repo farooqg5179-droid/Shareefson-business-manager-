@@ -50,10 +50,25 @@ export default function AICommandCenter() {
     setError("");
     setResult(null);
     try {
-      const data = await previewAIAutomation(message, voiceBlob);
-      setResult(data);
-      if (data.voice_transcript) setMessage(data.voice_transcript);
-      const spoken = data.summary || data.title;
+      const response = await previewAIAutomation(message, voiceBlob);
+      // The Edge Function may return the action details nested under plan/result.
+      const normalized = response?.result
+        ? {
+            ...response,
+            title: response.title || response.plan?.title || "AI Automation Result",
+            summary: response.summary || response.plan?.summary || response.result?.summary || response.result?.message || "",
+            message: response.message || response.result?.message || "",
+            action: response.action || response.plan?.action || "",
+            steps: response.steps || response.plan?.steps || [],
+            data: response.data ?? response.result?.data ?? response.plan?.data ?? null,
+            requires_confirmation: response.requires_confirmation ?? response.plan?.requires_confirmation ?? false,
+            confirmation_message: response.confirmation_message || response.plan?.confirmation_message || "",
+            voice_transcript: response.voice_transcript || response.transcript || "",
+          }
+        : response;
+      setResult(normalized);
+      if (normalized.voice_transcript) setMessage(normalized.voice_transcript);
+      const spoken = normalized.summary || normalized.title || normalized.message;
       if (spoken) speakText(spoken);
     } catch (e) {
       setError(e.message || "AI automation failed.");
