@@ -3,10 +3,20 @@ import { confirmAIAutomation, previewAIAutomation } from "./aiAutomationService"
 import "./aiAutomation.css";
 
 function prettyData(data) {
-  if (!data) return null;
+  if (data === null || data === undefined) return null;
   if (Array.isArray(data)) return data;
-  if (data.customer || data.booking) return [data];
+  if (typeof data === "object") return [data];
   return null;
+}
+
+function displayValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function labelFor(key) {
+  return String(key || "").replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
 function speakText(text) {
@@ -275,11 +285,18 @@ export default function AICommandCenter() {
                     <h3>{row.customer_name || row.name || row.event_type || row.title || "Record"}</h3>
                     {isBooking && <div className="ai-event-name">{row.event_type || "Event"}{row.package_name ? " · " + row.package_name : ""}</div>}
                     <div className="ai-card-details">
-                      {row.phone && <div className="ai-detail"><span>Phone</span><strong>{row.phone}</strong></div>}
-                      {row.event_date && <div className="ai-detail"><span>Event date</span><strong>{row.event_date}</strong></div>}
+                      {row.phone && <div className="ai-detail"><span>Phone</span><strong>{displayValue(row.phone)}</strong></div>}
+                      {row.event_date && <div className="ai-detail"><span>Event date</span><strong>{displayValue(row.event_date)}</strong></div>}
                       {row.event_time && row.event_time !== "00:00:00" && <div className="ai-detail"><span>Time</span><strong>{String(row.event_time).slice(0, 5)}</strong></div>}
-                      {row.venue && <div className="ai-detail"><span>Venue</span><strong>{row.venue}</strong></div>}
-                      {row.services && <div className="ai-detail ai-detail-wide"><span>Services</span><strong>{row.services}</strong></div>}
+                      {row.venue && <div className="ai-detail"><span>Venue</span><strong>{displayValue(row.venue)}</strong></div>}
+                      {row.services && <div className="ai-detail ai-detail-wide"><span>Services</span><strong>{displayValue(row.services)}</strong></div>}
+                      {Object.entries(row)
+                        .filter(([key, value]) => !["id","user_id","customer_id","booking_id","invoice_id","event_type","event_date","event_time","venue","services","customer_name","name","title","package_name","phone","total_amount","total","advance_amount","advance","remaining_amount","remaining","booking_status","status","created_at","updated_at","custom_data","attachments","items","next_bookings"].includes(key) && value !== null && value !== "" && typeof value !== "object")
+                        .slice(0, 10)
+                        .map(([key, value]) => <div className="ai-detail" key={key}><span>{labelFor(key)}</span><strong>{displayValue(value)}</strong></div>)}
+                      {Array.isArray(row.next_bookings) && row.next_bookings.length > 0 && (
+                        <div className="ai-detail ai-detail-wide"><span>Next bookings</span><strong>{row.next_bookings.map(b => `${b.customer_name || b.event_type || "Event"} — ${b.event_date || "Date not set"}`).join(" · ")}</strong></div>
+                      )}
                     </div>
                     {(row.total_amount !== undefined || row.advance_amount !== undefined || row.remaining_amount !== undefined) && (
                       <div className="ai-money-strip">
