@@ -252,17 +252,45 @@ export default function AICommandCenter() {
             </div>
           )}
 
+          {result.message && <div className="ai-result-message">{result.message}</div>}
+
           {rows && rows.length > 0 && (
             <div className="ai-readable-results">
-              {rows.slice(0, 10).map((row, index) => (
-                <div className="ai-result-card" key={row.id || index}>
-                  <strong>{row.name || row.customer_name || row.event_type || "Result"}</strong>
-                  {row.phone && <span>Phone: {row.phone}</span>}
-                  {row.event_date && <span>Event: {row.event_date}</span>}
-                  {row.venue && <span>Venue: {row.venue}</span>}
-                  {row.total_amount !== undefined && <span>Total: Rs. {Number(row.total_amount || 0).toLocaleString("en-PK")}</span>}
-                </div>
-              ))}
+              <div className="ai-results-heading">
+                <span>FOUND RECORDS</span>
+                <strong>{rows.length} {rows.length === 1 ? "record" : "records"}</strong>
+              </div>
+              {rows.slice(0, 10).map((row, index) => {
+                const isBooking = Boolean(row.event_type || row.event_date || row.venue);
+                const amount = Number(row.total_amount ?? row.total ?? 0);
+                const advance = Number(row.advance_amount ?? row.advance ?? 0);
+                const remaining = Number(row.remaining_amount ?? row.remaining ?? Math.max(0, amount - advance));
+                const status = row.booking_status || row.status || "Record found";
+                return (
+                  <article className="ai-result-card" key={row.id || index}>
+                    <div className="ai-card-topline">
+                      <span className="ai-card-kind">{isBooking ? "📅 BOOKING" : row.phone ? "👤 CUSTOMER" : "📄 BUSINESS RECORD"}</span>
+                      <span className={/complete|paid/i.test(status) ? "ai-status-pill is-done" : "ai-status-pill"}>{status}</span>
+                    </div>
+                    <h3>{row.customer_name || row.name || row.event_type || row.title || "Record"}</h3>
+                    {isBooking && <div className="ai-event-name">{row.event_type || "Event"}{row.package_name ? " · " + row.package_name : ""}</div>}
+                    <div className="ai-card-details">
+                      {row.phone && <div className="ai-detail"><span>Phone</span><strong>{row.phone}</strong></div>}
+                      {row.event_date && <div className="ai-detail"><span>Event date</span><strong>{row.event_date}</strong></div>}
+                      {row.event_time && row.event_time !== "00:00:00" && <div className="ai-detail"><span>Time</span><strong>{String(row.event_time).slice(0, 5)}</strong></div>}
+                      {row.venue && <div className="ai-detail"><span>Venue</span><strong>{row.venue}</strong></div>}
+                      {row.services && <div className="ai-detail ai-detail-wide"><span>Services</span><strong>{row.services}</strong></div>}
+                    </div>
+                    {(row.total_amount !== undefined || row.advance_amount !== undefined || row.remaining_amount !== undefined) && (
+                      <div className="ai-money-strip">
+                        <div><span>Total</span><strong>Rs. {amount.toLocaleString("en-PK")}</strong></div>
+                        <div><span>Advance</span><strong>Rs. {advance.toLocaleString("en-PK")}</strong></div>
+                        <div><span>Remaining</span><strong>Rs. {remaining.toLocaleString("en-PK")}</strong></div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
 
