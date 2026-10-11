@@ -1,3 +1,4 @@
+// Vercel redeploy trigger: AI quotation automation UI integration.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabase";
 import "./App.css";
