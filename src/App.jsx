@@ -3,6 +3,7 @@ import { supabase } from "./lib/supabase";
 import "./App.css";
 import QuotationManager from "./features/quotations/QuotationManager";
 import AICommandCenter from "./features/ai-automation/AICommandCenter";
+import MenuPricingManager from "./features/menu-pricing/MenuPricingManager";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { Capacitor } from "@capacitor/core";
@@ -2298,6 +2299,7 @@ function App() {
     ];
     return <div className="dashboard">
       <PageHeader title="Settings" action={<button className="secondary-button" onClick={() => setCurrentPage("home")}>← Back</button>} />
+      <div className="form-card menu-pricing-settings-link"><h2>Menu & Pricing</h2><p>Food menu, per-kg rates, serving quantity, lights, stage aur doosri services ke rates manage karein.</p><button type="button" className="gold-button wide" onClick={() => setCurrentPage("menu-pricing")}>Open Menu & Pricing</button></div>
       <div className="form-card settings-signout-card">
         <h2>Account & Security</h2>
         <p>Sign out of your account on this device.</p>
@@ -2370,6 +2372,7 @@ function App() {
       case "booking-detail": return renderBookingDetail();
       case "invoices": return renderInvoices();
       case "ai-automation": return <AICommandCenter />;
+      case "menu-pricing": return <MenuPricingManager />;
       case "quotations": return <QuotationManager businessProfile={{ business_name: businessName, phone, whatsapp_number: whatsapp, address, logo_url: logoPreview, signature_url: signaturePreview }} onConvertToBooking={openBookingFromQuotation} onConvertToInvoice={openInvoiceFromQuotation} session={session} />;
       case "invoice-form": return renderInvoiceForm();
       case "invoice-detail": return renderInvoiceDetail();
