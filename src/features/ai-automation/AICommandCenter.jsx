@@ -4,8 +4,36 @@ import "./aiAutomation.css";
 
 function prettyData(data) {
   if (data === null || data === undefined) return null;
-  if (Array.isArray(data)) return data;
-  if (typeof data === "object") return [data];
+
+  // Multi-action responses wrap real records inside each action's "data".
+  // Flatten those wrappers so the UI shows the booking/customer/invoice itself.
+  if (Array.isArray(data)) {
+    return data.flatMap(item => {
+      if (item && typeof item === "object" && Array.isArray(item.data)) {
+        return item.data.map(record => ({
+          ...record,
+          _result_title: item.title || item.action || "",
+          _result_message: item.message || "",
+        }));
+      }
+      if (item && typeof item === "object" && item.data && typeof item.data === "object") {
+        const inner = item.data;
+        const looksLikeRecord = Boolean(
+          inner.event_date || inner.event_type || inner.venue ||
+          inner.customer_name || inner.customer_id || inner.invoice_number ||
+          inner.quotation_number || inner.phone || inner.reminder_date
+        );
+        if (looksLikeRecord) {
+          return [{ ...inner, _result_title: item.title || item.action || "" }];
+        }
+      }
+      return [item];
+    });
+  }
+  if (typeof data === "object") {
+    if (Array.isArray(data.data)) return prettyData(data.data);
+    return [data];
+  }
   return null;
 }
 
@@ -259,7 +287,7 @@ export default function AICommandCenter() {
 
           {result.action && (
             <div className="ai-result-meta">
-              <span>Action: {result.action}</span>
+              <span>Action: {result.action.replaceAll("_", " ")}</span>
               {result.executed && <span>Completed</span>}
             </div>
           )}
@@ -284,7 +312,7 @@ export default function AICommandCenter() {
                 <strong>{rows.length} {rows.length === 1 ? "record" : "records"}</strong>
               </div>
               {rows.slice(0, 10).map((row, index) => {
-                const isBooking = Boolean(row.event_type || row.event_date || row.venue);
+                const isBooking = Boolean(row.event_type || row.event_date || row.venue || row.booking_date);
                 const amount = Number(row.total_amount ?? row.total ?? 0);
                 const advance = Number(row.advance_amount ?? row.advance ?? 0);
                 const remaining = Number(row.remaining_amount ?? row.remaining ?? Math.max(0, amount - advance));
@@ -295,7 +323,7 @@ export default function AICommandCenter() {
                       <span className="ai-card-kind">{isBooking ? "📅 BOOKING" : row.phone ? "👤 CUSTOMER" : "📄 BUSINESS RECORD"}</span>
                       <span className={/complete|paid/i.test(status) ? "ai-status-pill is-done" : "ai-status-pill"}>{status}</span>
                     </div>
-                    <h3>{row.customer_name || row.name || row.event_type || row.title || "Record"}</h3>
+                    <h3>{row.customer_name || row.name || row.event_type || row.title || row._result_title || "Business Record"}</h3>
                     {isBooking && <div className="ai-event-name">{row.event_type || "Event"}{row.package_name ? " · " + row.package_name : ""}</div>}
                     <div className="ai-card-details">
                       {row.phone && <div className="ai-detail"><span>Phone</span><strong>{displayValue(row.phone)}</strong></div>}
@@ -304,7 +332,7 @@ export default function AICommandCenter() {
                       {row.venue && <div className="ai-detail"><span>Venue</span><strong>{displayValue(row.venue)}</strong></div>}
                       {row.services && <div className="ai-detail ai-detail-wide"><span>Services</span><strong>{displayValue(row.services)}</strong></div>}
                       {Object.entries(row)
-                        .filter(([key, value]) => !["id","user_id","customer_id","booking_id","invoice_id","event_type","event_date","event_time","venue","services","customer_name","name","title","package_name","phone","total_amount","total","advance_amount","advance","remaining_amount","remaining","booking_status","status","created_at","updated_at","custom_data","attachments","items","next_bookings"].includes(key) && value !== null && value !== "" && typeof value !== "object")
+                        .filter(([key, value]) => !["_result_title","_result_message","id","user_id","customer_id","booking_id","invoice_id","event_type","event_date","event_time","venue","services","customer_name","name","title","package_name","phone","total_amount","total","advance_amount","advance","remaining_amount","remaining","booking_status","status","created_at","updated_at","custom_data","attachments","items","next_bookings"].includes(key) && value !== null && value !== "" && typeof value !== "object")
                         .slice(0, 10)
                         .map(([key, value]) => <div className="ai-detail" key={key}><span>{labelFor(key)}</span><strong>{displayValue(value)}</strong></div>)}
                       {Array.isArray(row.next_bookings) && row.next_bookings.length > 0 && (
