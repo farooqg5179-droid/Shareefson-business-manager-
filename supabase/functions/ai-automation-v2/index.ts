@@ -300,7 +300,7 @@ async function execute(db: any, userId: string, plan: any, ctx: any) {
 
       if (!customerName) throw new Error("Customer name is required for booking.");
       if (!eventType) throw new Error("Event type is required for booking.");
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(eventDate)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
         throw new Error("Event date is required in YYYY-MM-DD format.");
       }
       if (!Number.isFinite(guests) || guests < 0) throw new Error("Guests must be a valid non-negative number.");
