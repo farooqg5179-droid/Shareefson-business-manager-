@@ -10,6 +10,7 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "openai/gpt-oss-120b";
 
 const WRITE_ACTIONS = new Set([
+  "create_booking",
   "create_invoice",
   "create_quotation",
   "customer_followup",
@@ -20,6 +21,7 @@ const WRITE_ACTIONS = new Set([
 const ACTIONS = [
   "search_customer",
   "search_booking",
+  "create_booking",
   "prepare_invoice",
   "create_invoice",
   "prepare_quotation",
@@ -94,7 +96,7 @@ async function askAI(message: string, context: unknown) {
 You are Shareef Sons Business Manager AI.
 Understand English, Urdu, Roman Urdu and mixed language.
 Return ONLY JSON.
-Allowed actions: ${ACTIONS.join(", ")}.
+Allowed actions: ${ACTIONS.join(", ")}. For create_booking, parameters should include customer_name, event_type, event_date (YYYY-MM-DD), guests, total_amount, advance_amount, venue, event_time, notes. Never invent missing dates or amounts; ask a clarification by choosing action unknown if essential fields are missing.
 Search, prepare, briefing and analysis are read-only.
 Create, follow-up, notification and WhatsApp actions require admin confirmation.
 Never say something was created or sent unless the server actually did it.
@@ -286,6 +288,60 @@ async function execute(db: any, userId: string, plan: any, ctx: any) {
           expenses: total(ctx.expenses, "amount"),
         },
       };
+
+    case "create_booking": {
+      const customer = findCustomer(ctx, p)[0];
+      const customerName = str(p.customer_name || p.name) || customer?.name || "";
+      const eventType = str(p.event_type);
+      const eventDate = str(p.event_date);
+      const guests = Number(p.guests || 0);
+      const totalAmount = Number(p.total_amount || p.total || 0);
+      const advanceAmount = Number(p.advance_amount || p.advance || 0);
+
+      if (!customerName) throw new Error("Customer name is required for booking.");
+      if (!eventType) throw new Error("Event type is required for booking.");
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(eventDate)) {
+        throw new Error("Event date is required in YYYY-MM-DD format.");
+      }
+      if (!Number.isFinite(guests) || guests < 0) throw new Error("Guests must be a valid non-negative number.");
+      if (!Number.isFinite(totalAmount) || totalAmount < 0) throw new Error("Total amount must be a valid non-negative number.");
+      if (!Number.isFinite(advanceAmount) || advanceAmount < 0 || advanceAmount > totalAmount) {
+        throw new Error("Advance amount must be between zero and total amount.");
+      }
+
+      const duplicate = ctx.bookings.find((b: any) =>
+        b.event_date === eventDate &&
+        str(b.event_type).toLowerCase() === eventType.toLowerCase() &&
+        str(b.venue).toLowerCase() === str(p.venue).toLowerCase() &&
+        ["pending", "confirmed", "booked"].includes(str(b.status).toLowerCase())
+      );
+      if (duplicate) throw new Error("A similar active booking already exists on this date and venue. Review existing bookings before creating another.");
+
+      const row = {
+        user_id: userId,
+        customer_id: p.customer_id || customer?.id || null,
+        customer_name: customerName,
+        event_type: eventType,
+        event_date: eventDate,
+        event_time: str(p.event_time) || null,
+        venue: str(p.venue) || null,
+        guests,
+        total_amount: totalAmount,
+        advance_amount: advanceAmount,
+        remaining_amount: Math.max(totalAmount - advanceAmount, 0),
+        status: str(p.status) || "Pending",
+        notes: str(p.notes) || null,
+      };
+
+      const { data, error } = await db
+        .from("ss_bookings")
+        .insert(row)
+        .select()
+        .single();
+
+      if (error) throw new Error("Booking creation failed: " + error.message);
+      return { executed: true, data };
+    }
 
     case "create_invoice": {
       const customer = findCustomer(ctx, p)[0];
