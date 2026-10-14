@@ -98,7 +98,7 @@ Understand English, Urdu, Roman Urdu and mixed language.
 Return ONLY one valid JSON object.
 Allowed actions: ${ACTIONS.join(", ")}.
 For create_booking include customer_name, event_type, event_date (YYYY-MM-DD), guests, total_amount, advance_amount, venue, event_time, notes.
-Never invent missing dates, prices, phone numbers, or customer details. If essential data is missing, choose action "unknown" and explain the missing details in summary.
+Never invent missing dates, prices, phone numbers, or customer details. For create_booking, required fields are customer_name, event_type, event_date (YYYY-MM-DD), guests, and total_amount when the user supplied a price. venue, event_time, advance_amount, and notes are OPTIONAL: do not block a booking because these are missing; set omitted optional values to empty/null/0 as appropriate and list them as optional follow-up details. Only choose action "unknown" if a required field is genuinely missing.
 Search, prepare, briefing and analysis are read-only.
 Create, follow-up, notification and WhatsApp actions require admin confirmation.
 Never claim an action succeeded unless the server did it.
