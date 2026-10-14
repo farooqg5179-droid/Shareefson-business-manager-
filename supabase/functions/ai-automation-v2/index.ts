@@ -88,53 +88,90 @@ async function transcribe(file: File) {
   return text;
 }
 
-async function askAI(message: string, context: unknown) {
+async function askAI(message: string, context: any) {
   const key = Deno.env.get("GROQ_API_KEY");
   if (!key) throw new Error("GROQ_API_KEY is missing.");
 
   const system = `
 You are Shareef Sons Business Manager AI.
 Understand English, Urdu, Roman Urdu and mixed language.
-Return ONLY JSON.
-Allowed actions: ${ACTIONS.join(", ")}. For create_booking, parameters should include customer_name, event_type, event_date (YYYY-MM-DD), guests, total_amount, advance_amount, venue, event_time, notes. Never invent missing dates or amounts; ask a clarification by choosing action unknown if essential fields are missing.
+Return ONLY one valid JSON object.
+Allowed actions: ${ACTIONS.join(", ")}.
+For create_booking include customer_name, event_type, event_date (YYYY-MM-DD), guests, total_amount, advance_amount, venue, event_time, notes.
+Never invent missing dates, prices, phone numbers, or customer details. If essential data is missing, choose action "unknown" and explain the missing details in summary.
 Search, prepare, briefing and analysis are read-only.
 Create, follow-up, notification and WhatsApp actions require admin confirmation.
-Never say something was created or sent unless the server actually did it.
-For create actions put required values inside parameters.
-JSON:
-{"title":"","summary":"","action":"","confirmation_message":"","steps":[],"parameters":{}}
+Never claim an action succeeded unless the server did it.
+JSON shape: {"title":"","summary":"","action":"","confirmation_message":"","steps":[],"parameters":{}}
 `;
 
-  const r = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + key,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: JSON.stringify({ message, context }),
-        },
-      ],
-    }),
-  });
+  // Send a compact context to stay below Groq's TPM request limit.
+  const compact = (rows: any[], fields: string[], limit = 12) =>
+    (Array.isArray(rows) ? rows : []).slice(0, limit).map((row: any) => {
+      const out: any = {};
+      for (const field of fields) {
+        const value = row?.[field];
+        if (value !== undefined && value !== null && value !== "") out[field] = value;
+      }
+      return out;
+    });
 
-  if (!r.ok) throw new Error("Groq request failed: " + await r.text());
+  const slimContext = {
+    customers: compact(context?.customers, ["id", "name", "phone", "whatsapp_number"], 12),
+    bookings: compact(context?.bookings, ["id", "customer_id", "customer_name", "event_type", "event_date", "event_time", "venue", "guests", "total_amount", "advance_amount", "remaining_amount", "status"], 12),
+    invoices: compact(context?.invoices, ["id", "customer_id", "customer_name", "invoice_number", "invoice_date", "event_type", "event_date", "total_amount", "paid_amount", "remaining_amount"], 8),
+    quotations: compact(context?.quotations, ["id", "customer_id", "quotation_number", "event_type", "event_date", "guests", "total", "status"], 8),
+    payments: compact(context?.payments, ["id", "customer_id", "booking_id", "payment_type", "amount", "payment_date", "notes"], 10),
+    expenses: compact(context?.expenses, ["id", "category", "amount", "expense_date", "notes"], 10),
+  };
 
-  const data = await r.json();
-  const raw = data?.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("Groq returned no plan.");
+  const send = async (userContext: any) => {
+    const r = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + key,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.1,
+        max_tokens: 900,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: JSON.stringify({ message, context: userContext }) },
+        ],
+      }),
+    });
+    const rawText = await r.text();
+    if (!r.ok) {
+      if (r.status === 413 || rawText.includes("tokens per minute") || rawText.includes("rate_limit_exceeded")) {
+        throw new Error("AI context is too large for the current Groq token limit. Compact request was sent; try again shortly or reduce saved records.");
+      }
+      throw new Error("Groq request failed: " + rawText);
+    }
+    let data: any;
+    try { data = JSON.parse(rawText); } catch { throw new Error("Groq returned an unreadable response."); }
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) throw new Error("Groq returned no plan.");
+    try { return planClean(JSON.parse(raw)); } catch { throw new Error("Groq returned invalid JSON."); }
+  };
 
   try {
-    return planClean(JSON.parse(raw));
-  } catch {
-    throw new Error("Groq returned invalid JSON.");
+    return await send(slimContext);
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "";
+    if (!messageText.includes("too large")) throw error;
+    // Retry once with no historical records; the database context is loaded server-side
+    // for execution, so it remains available even when omitted from the model prompt.
+    return await send({
+      customers: compact(context?.customers, ["id", "name", "phone", "whatsapp_number"], 4),
+      bookings: compact(context?.bookings, ["id", "customer_name", "event_type", "event_date", "status"], 4),
+      invoices: [],
+      quotations: [],
+      payments: [],
+      expenses: [],
+    });
   }
 }
 
