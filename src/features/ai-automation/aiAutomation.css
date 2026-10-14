@@ -319,3 +319,48 @@
   .ai-money-strip { gap: 5px; }
   .ai-money-strip strong { font-size: 11px; }
 }
+
+
+/* Persistent ChatGPT-style conversation */
+.ai-chat-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid #e8e1c9;
+  border-radius: 16px;
+  background: #faf9f5;
+}
+.ai-chat-empty { margin: 0; color: #6d6d6d; font-size: 14px; }
+.ai-chat-message {
+  max-width: 92%;
+  padding: 11px 13px;
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+}
+.ai-chat-message span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  opacity: .7;
+}
+.ai-chat-message p { margin: 0; white-space: pre-wrap; line-height: 1.45; }
+.ai-chat-message.is-user {
+  align-self: flex-end;
+  color: #211d10;
+  background: #f3e8b8;
+  border-bottom-right-radius: 4px;
+}
+.ai-chat-message.is-assistant {
+  align-self: flex-start;
+  color: #222;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-bottom-left-radius: 4px;
+}
