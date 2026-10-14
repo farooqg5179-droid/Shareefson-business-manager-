@@ -66,6 +66,9 @@ function speakText(text) {
 export default function AICommandCenter() {
   const [message, setMessage] = useState("");
   const [result, setResult] = useState(null);
+  const [chatHistory, setChatHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ss_ai_chat_history_v1") || "[]"); } catch { return []; }
+  });
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -73,6 +76,10 @@ export default function AICommandCenter() {
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
+
+  useEffect(() => {
+    try { localStorage.setItem("ss_ai_chat_history_v1", JSON.stringify(chatHistory.slice(-60))); } catch {}
+  }, [chatHistory]);
 
   useEffect(() => {
     return () => {
@@ -86,9 +93,11 @@ export default function AICommandCenter() {
     if (!voiceBlob && !message.trim()) return;
     setLoading(true);
     setError("");
-    setResult(null);
+    const userText = voiceBlob ? (message.trim() || "Voice command") : message.trim();
+    const priorTurns = chatHistory.slice(-12).map(turn => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.text}`).join("\n");
+    const contextualMessage = priorTurns ? `Previous conversation (continue it; do not forget these details):\n${priorTurns}\n\nLatest user message: ${userText}` : userText;
     try {
-      const response = await previewAIAutomation(message, voiceBlob);
+      const response = await previewAIAutomation(contextualMessage, voiceBlob);
       // The Edge Function may return the action details nested under plan/result.
       const normalized = response?.result
         ? {
@@ -105,11 +114,13 @@ export default function AICommandCenter() {
           }
         : response;
       setResult(normalized);
+      setChatHistory(previous => [...previous, { role: "user", text: normalized.voice_transcript || userText, at: new Date().toISOString() }, { role: "assistant", text: normalized.summary || normalized.message || normalized.title || "AI response received.", at: new Date().toISOString(), result: normalized }].slice(-60));
       if (normalized.voice_transcript) setMessage(normalized.voice_transcript);
       const spoken = normalized.summary || normalized.title || normalized.message;
       if (spoken) speakText(spoken);
     } catch (e) {
       setError(e.message || "AI automation failed.");
+      setChatHistory(previous => [...previous, { role: "user", text: userText, at: new Date().toISOString() }, { role: "assistant", text: e.message || "AI automation failed.", at: new Date().toISOString(), isError: true }].slice(-60));
     } finally {
       setLoading(false);
     }
@@ -237,6 +248,15 @@ export default function AICommandCenter() {
           <h2>AI Command Center</h2>
           <p>Type or speak: customers, bookings, invoices, quotations, finance and business actions.</p>
         </div>
+      </div>
+
+      <div className="ai-chat-history" aria-live="polite">
+        {chatHistory.length === 0 ? <p className="ai-chat-empty">Aapki AI conversation yahan save hoti rahegi. Naya sawal poochain; pichli chat remove nahi hogi.</p> : chatHistory.map((turn, index) => (
+          <div className={`ai-chat-message ${turn.role === "user" ? "is-user" : "is-assistant"}`} key={`${turn.at || "turn"}-${index}`}>
+            <span>{turn.role === "user" ? "You" : "SS Assistant"}</span>
+            <p>{turn.text}</p>
+          </div>
+        ))}
       </div>
 
       <textarea
