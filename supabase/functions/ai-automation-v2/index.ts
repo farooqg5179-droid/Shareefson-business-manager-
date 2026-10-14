@@ -476,8 +476,26 @@ async function execute(db: any, userId: string, plan: any, ctx: any) {
         },
       };
 
+    case "unknown":
+      return {
+        executed: true,
+        data: {
+          clarification_needed: true,
+          message: str(plan.summary) || "Please provide the task and any required customer, date, or amount details.",
+          suggested_action: "Please provide more details.",
+          parameters: p,
+        },
+      };
+
     default:
-      throw new Error("Unsupported AI action.");
+      return {
+        executed: true,
+        data: {
+          clarification_needed: true,
+          message: "No supported action was identified. Please describe the task and required details more clearly.",
+          unsupported_action: plan.action,
+        },
+      };
   }
 }
 
